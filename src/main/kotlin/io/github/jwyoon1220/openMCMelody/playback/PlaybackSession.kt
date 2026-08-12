@@ -13,6 +13,8 @@ class PlaybackSession(
 ) {
     var cursorTick: Int = 0
     var nextEventIndex: Int = 0
+    /** Separate cursor into [song]'s parallel arrays for [PlayMode.INSTANT] targets - see [PlaybackManager.tick]. */
+    var instantNextEventIndex: Int = 0
     var state: PlaybackState = PlaybackState.PLAYING
     /** Whether the next playlist song has already been speculatively warmed into [io.github.jwyoon1220.openMCMelody.midi.SongCache]. */
     var prefetched: Boolean = false

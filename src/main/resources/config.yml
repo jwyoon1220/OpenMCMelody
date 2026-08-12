@@ -13,7 +13,7 @@ web:
   # Same machine as the client (local testing): 'http://localhost:8080'
   # Real server:                                'http://play.example.com:8080' or 'http://203.0.113.10:8080'
   public-url: ''
-  port: 8080
+  port: 80
 
 # /midi soundpack fromsf2 - auto-builds a soundpack from a .sf2/.dls file dropped into
 # soundfonts/. Requires ffmpeg on this machine (only the JDK's built-in MIDI synth is used for

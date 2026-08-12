@@ -2,16 +2,21 @@ package io.github.jwyoon1220.openMCMelody.playback
 
 import io.github.jwyoon1220.openMCMelody.midi.BukkitExecutors
 import io.github.jwyoon1220.openMCMelody.midi.InstrumentSlot
+import io.github.jwyoon1220.openMCMelody.midi.MC_TICK_MICROS
 import io.github.jwyoon1220.openMCMelody.midi.ParsedSong
 import io.github.jwyoon1220.openMCMelody.midi.SongCache
 import io.github.jwyoon1220.openMCMelody.playlist.PlaylistManager
 import io.github.jwyoon1220.openMCMelody.soundpack.SoundPackManager
 import org.bukkit.Bukkit
+import org.bukkit.SoundCategory
 import org.bukkit.plugin.Plugin
 import org.bukkit.scheduler.BukkitTask
 import java.io.File
 import java.util.UUID
 import java.util.concurrent.Executor
+import java.util.concurrent.Executors
+import java.util.concurrent.ScheduledExecutorService
+import java.util.concurrent.TimeUnit
 
 private const val MAX_NOTES_PER_TICK = 16
 
@@ -28,6 +33,7 @@ class PlaybackManager(
     private val songCache: SongCache,
     private val midiFolder: File,
     private val soundPackManager: SoundPackManager,
+    private val playModeManager: PlayModeManager,
 ) {
     private val mainThreadExecutor: Executor = BukkitExecutors.main(plugin)
 
@@ -35,6 +41,10 @@ class PlaybackManager(
     private val activeSessions = LinkedHashSet<PlaybackSession>()
 
     private var task: BukkitTask? = null
+
+    // Dedicated real-time thread for PlayMode.INSTANT dispatch - see scheduleInstantNote. Kept
+    // separate from the Bukkit scheduler entirely, since the latter can't schedule sub-tick.
+    private var instantExecutor: ScheduledExecutorService? = null
 
     // Reusable per-tick scratch buffers (dedupe + polyphony cap), avoids allocating every tick.
     private var batchSlot = arrayOfNulls<InstrumentSlot>(32)
@@ -45,12 +55,17 @@ class PlaybackManager(
 
     fun enable() {
         check(task == null) { "PlaybackManager already enabled" }
+        instantExecutor = Executors.newSingleThreadScheduledExecutor { r ->
+            Thread(r, "OpenMCMelody-InstantDispatch").apply { isDaemon = true }
+        }
         task = plugin.server.scheduler.runTaskTimer(plugin, Runnable { tick() }, 0L, 1L)
     }
 
     fun disable() {
         task?.cancel()
         task = null
+        instantExecutor?.shutdownNow()
+        instantExecutor = null
         activeSessions.clear()
         sessionsByTarget.clear()
     }
@@ -107,7 +122,26 @@ class PlaybackManager(
                 batchAdd(song.sound[idx], song.vanillaPitch[idx], song.customPitch[idx], song.volume[idx])
                 session.nextEventIndex++
             }
-            if (batchSize > 0) flushBatch(session.targets)
+            if (batchSize > 0) {
+                val tickTargets = session.targets.filterTo(LinkedHashSet()) { playModeManager.modeOf(it) != PlayMode.INSTANT }
+                flushBatch(tickTargets)
+            }
+
+            // Real-time sub-tick dispatch for PlayMode.INSTANT targets, driven by each note's true
+            // unquantized onset (song.tickMicros) instead of the tick-locked/collision-spread
+            // song.tick above - kept on its own cursor so it stays correct even if a listener
+            // switches modes mid-session. Cheap to always advance; only schedules when the window
+            // actually has something due, and only bothers snapshotting targets when it does.
+            val windowStartMicros = session.cursorTick.toLong() * MC_TICK_MICROS
+            val windowEndMicros = windowStartMicros + MC_TICK_MICROS
+            if (session.instantNextEventIndex < song.size && song.tickMicros[session.instantNextEventIndex] < windowEndMicros) {
+                val instantTargets = session.targets.filterTo(LinkedHashSet()) { playModeManager.modeOf(it) == PlayMode.INSTANT }
+                while (session.instantNextEventIndex < song.size && song.tickMicros[session.instantNextEventIndex] < windowEndMicros) {
+                    val idx = session.instantNextEventIndex
+                    if (instantTargets.isNotEmpty()) scheduleInstantNote(instantTargets, song, idx, windowStartMicros)
+                    session.instantNextEventIndex++
+                }
+            }
 
             session.cursorTick++
 
@@ -173,11 +207,53 @@ class PlaybackManager(
         for (uuid in targets) {
             val player = Bukkit.getPlayer(uuid) ?: continue
             if (customKey != null) {
-                player.playSound(player.location, customKey, volume, customPitch)
+                player.playSound(player.location, customKey,  SoundCategory.RECORDS, volume, customPitch)
             } else {
-                player.playSound(player.location, slot.vanilla, volume, vanillaPitch)
+                player.playSound(player.location, slot.vanilla, SoundCategory.RECORDS, volume, vanillaPitch)
             }
         }
+    }
+
+    /**
+     * Dispatches one note for [PlayMode.INSTANT] targets at its true sub-tick onset rather than
+     * waiting for the next server tick. Everything Bukkit-touching that the eventual send needs -
+     * the [org.bukkit.entity.Player] references and their current location - is captured here on
+     * the main thread; the scheduled callback below only reads that already-captured snapshot.
+     *
+     * Calling [org.bukkit.entity.Player.playSound] from [instantExecutor]'s thread is outside
+     * Paper's documented thread-safety contract for [org.bukkit.entity.Player]. It works in
+     * practice because it only ever enqueues an outbound packet write - the same class of
+     * operation Minecraft's own networking code performs off the main thread - but a future
+     * server version could tighten that, hence the defensive try/catch: one dropped note should
+     * never surface as an error, just a missed sound.
+     */
+    private fun scheduleInstantNote(targets: Set<UUID>, song: ParsedSong, idx: Int, windowStartMicros: Long) {
+        val executor = instantExecutor ?: return
+        val players = targets.mapNotNull { Bukkit.getPlayer(it) }
+        if (players.isEmpty()) return
+        val locations = players.associateWith { it.location }
+        val slot = song.sound[idx]
+        val customKey = soundPackManager.resolve(slot)
+        val vanillaPitch = song.vanillaPitch[idx]
+        val customPitch = song.customPitch[idx]
+        val volume = song.volume[idx]
+        val delayMillis = (song.tickMicros[idx] - windowStartMicros).coerceAtLeast(0) / 1000
+
+        executor.schedule({
+            for (player in players) {
+                if (!player.isOnline) continue
+                val location = locations.getValue(player)
+                try {
+                    if (customKey != null) {
+                        player.playSound(location, customKey, SoundCategory.RECORDS, volume, customPitch)
+                    } else {
+                        player.playSound(location, slot.vanilla, SoundCategory.RECORDS, volume, vanillaPitch)
+                    }
+                } catch (_: Exception) {
+                    // Best-effort: a mid-flight disconnect or send failure shouldn't kill the scheduler thread.
+                }
+            }
+        }, delayMillis, TimeUnit.MILLISECONDS)
     }
 
     private fun prefetchNextSong(session: PlaybackSession) {
@@ -258,6 +334,7 @@ class PlaybackManager(
         session.song = song
         session.cursorTick = 0
         session.nextEventIndex = 0
+        session.instantNextEventIndex = 0
         session.prefetched = false
         session.state = PlaybackState.PLAYING
     }

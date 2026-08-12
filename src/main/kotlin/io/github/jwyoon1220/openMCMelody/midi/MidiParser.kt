@@ -7,10 +7,17 @@ import javax.sound.midi.MidiSystem
 import javax.sound.midi.Sequence
 import javax.sound.midi.ShortMessage
 
-private const val MC_TICK_MICROS = 50_000.0
 private const val PERCUSSION_CHANNEL = 9
 private const val DEFAULT_TEMPO_US = 500_000L // 120 BPM, per the MIDI spec's implied default
 private const val SET_TEMPO_META_TYPE = 0x51
+
+// Minimum enforced spacing (in mc ticks) between two distinct onsets that would otherwise land on
+// the same mc tick. 1.0 (a full 50ms tick) fully separates every colliding note but stretches dense
+// runs 1:1 with however many notes collided. Using < 1.0 here lets a fraction of those onsets still
+// land back on the same tick (a partial chord) so a dense run resolves faster than that -
+// specifically ~1.3x faster at 1/1.3, which is enough to keep notes audibly distinct without
+// dragging a fast arpeggio out as long as pure 1-tick separation would.
+private const val MIN_ARPEGGIO_SPACING_TICKS = 1.0 / 1.3
 
 /**
  * Parses a Standard MIDI File into a [ParsedSong] ready for playback.
@@ -56,6 +63,7 @@ object MidiParser {
         val channelExpression = FloatArray(16) { 1.0f } // CC11
 
         var tickBuf = IntArray(1024)
+        var tickMicrosBuf = LongArray(1024)
         var soundBuf = arrayOfNulls<InstrumentSlot>(1024)
         var vanillaPitchBuf = FloatArray(1024)
         var customPitchBuf = FloatArray(1024)
@@ -63,10 +71,23 @@ object MidiParser {
         var count = 0
         var maxTick = 0
 
+        // Minecraft only delivers sound at 20Hz, so any notes originally spaced closer together
+        // than one mc tick (50ms) - a fast arpeggio, a grace note, a trill - would otherwise round
+        // onto the exact same mcTick and get batched into what sounds like a single chord. Notes
+        // that share a real MIDI onset (same source tick - an actual chord) still collapse onto one
+        // mcTick together; distinct onsets are pushed forward by at least MIN_ARPEGGIO_SPACING_TICKS
+        // so they keep audibly separating. virtualTick tracks that push-forward in fractional ticks
+        // (not the rounded integer mcTick) so the spacing debt doesn't compound into whole extra
+        // ticks faster than intended.
+        var lastSourceTick = -1L
+        var virtualTick = -1.0
+        var currentGroupMcTick = -1
+
         fun ensureCapacity(needed: Int) {
             if (tickBuf.size < needed) {
                 val newSize = (tickBuf.size * 2).coerceAtLeast(needed)
                 tickBuf = tickBuf.copyOf(newSize)
+                tickMicrosBuf = tickMicrosBuf.copyOf(newSize)
                 soundBuf = soundBuf.copyOf(newSize)
                 vanillaPitchBuf = vanillaPitchBuf.copyOf(newSize)
                 customPitchBuf = customPitchBuf.copyOf(newSize)
@@ -120,13 +141,30 @@ object MidiParser {
                 GmInstrumentMap.melodic(channelProgram[channel], note)
             }
 
-            val mcTick = Math.round(elapsedMicrosAt(indexed.tick) / MC_TICK_MICROS).toInt()
+            // The note's true, unquantized onset - independent of the spread applied to mcTick below.
+            // Playback modes that can schedule at finer-than-tick precision (see PlaybackManager's
+            // "instant" play mode) use this instead of mcTick, so they never inherit the artificial
+            // stretching that mcTick's collision-avoidance adds for the coarser tick-locked mode.
+            val rawMicros = Math.round(elapsedMicrosAt(indexed.tick))
+
+            val mcTick: Int
+            if (indexed.tick == lastSourceTick) {
+                mcTick = currentGroupMcTick
+            } else {
+                val rawTick = rawMicros / MC_TICK_MICROS.toDouble()
+                val candidateTick = maxOf(rawTick, virtualTick + MIN_ARPEGGIO_SPACING_TICKS)
+                mcTick = Math.round(candidateTick).toInt()
+                virtualTick = candidateTick
+                lastSourceTick = indexed.tick
+                currentGroupMcTick = mcTick
+            }
             if (mcTick > maxTick) maxTick = mcTick
 
             val dynamics = (velocity / 127f) * channelVolume[channel] * channelExpression[channel]
 
             ensureCapacity(count + 1)
             tickBuf[count] = mcTick
+            tickMicrosBuf[count] = rawMicros
             soundBuf[count] = resolution.slot
             vanillaPitchBuf[count] = resolution.vanillaPitch
             customPitchBuf[count] = resolution.customPitch
@@ -137,6 +175,7 @@ object MidiParser {
         return ParsedSong(
             sourceFileName = file.name,
             tick = tickBuf.copyOf(count),
+            tickMicros = tickMicrosBuf.copyOf(count),
             sound = Array(count) { soundBuf[it]!! },
             vanillaPitch = vanillaPitchBuf.copyOf(count),
             customPitch = customPitchBuf.copyOf(count),

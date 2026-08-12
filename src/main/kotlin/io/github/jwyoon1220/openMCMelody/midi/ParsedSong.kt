@@ -11,10 +11,15 @@ package io.github.jwyoon1220.openMCMelody.midi
  * Stored as parallel primitive arrays rather than a `List<NoteEvent>` of boxed objects,
  * since a dense song can carry tens of thousands of events and [SongCache] may hold
  * several parsed songs at once.
+ *
+ * [tick] is quantized (and, where notes collide, nudged apart - see [MidiParser]) to whole mc
+ * ticks for the default tick-locked playback path. [tickMicros] is each note's true, unquantized
+ * onset in microseconds since song start, used only by playback modes that can schedule sub-tick.
  */
 class ParsedSong(
     val sourceFileName: String,
     val tick: IntArray,
+    val tickMicros: LongArray,
     val sound: Array<InstrumentSlot>,
     val vanillaPitch: FloatArray,
     val customPitch: FloatArray,

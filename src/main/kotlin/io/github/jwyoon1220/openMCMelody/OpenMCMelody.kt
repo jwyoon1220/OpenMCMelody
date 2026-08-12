@@ -4,6 +4,7 @@ import io.github.jwyoon1220.openMCMelody.command.MidiCommand
 import io.github.jwyoon1220.openMCMelody.listener.PlayerConnectionListener
 import io.github.jwyoon1220.openMCMelody.midi.SongCache
 import io.github.jwyoon1220.openMCMelody.playback.PlaybackManager
+import io.github.jwyoon1220.openMCMelody.playback.PlayModeManager
 import io.github.jwyoon1220.openMCMelody.playlist.PlaylistManager
 import io.github.jwyoon1220.openMCMelody.soundfont.SoundFontConverter
 import io.github.jwyoon1220.openMCMelody.soundpack.SoundPackManager
@@ -42,7 +43,8 @@ class OpenMCMelody : JavaPlugin() {
         val soundPackManager = SoundPackManager(soundpacksFolder, File(dataFolder, "active-soundpack.txt"))
         val restoredPack = soundPackManager.restoreActiveFromDisk()
         if (restoredPack != null) logger.info("Restored active soundpack '$restoredPack'.")
-        val playbackManager = PlaybackManager(this, playlistManager, songCache, midiFolder, soundPackManager)
+        val playModeManager = PlayModeManager(this, File(dataFolder, "playmodes.yml"))
+        val playbackManager = PlaybackManager(this, playlistManager, songCache, midiFolder, soundPackManager, playModeManager)
         playbackManager.enable()
         this.playbackManager = playbackManager
 
@@ -59,7 +61,7 @@ class OpenMCMelody : JavaPlugin() {
 
         val midiCommand = MidiCommand(
             this, midiFolder, songCache, playbackManager, playlistManager, webAuthManager,
-            soundPackManager, publicUrl, soundfontsFolder, soundpacksFolder, soundFontConverter,
+            soundPackManager, publicUrl, soundfontsFolder, soundpacksFolder, soundFontConverter, playModeManager,
         )
         lifecycleManager.registerEventHandler(LifecycleEvents.COMMANDS) { event ->
             event.registrar().register(midiCommand.build(), "Play MIDI files as note block music")

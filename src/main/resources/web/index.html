@@ -345,7 +345,26 @@ async function onPlayerAction(ev) {
 
 function renderSongs() {
   const box = $('songs-list');
-  box.innerHTML = songs.length === 0 ? '<div class="empty">No .mid files in the midi/ folder.</div>' : songs.map((s) => '<div class="row"><span class="meta">' + esc(s) + '</span></div>').join('');
+  if (songs.length === 0) { box.innerHTML = '<div class="empty">No .mid files in the midi/ folder.</div>'; return; }
+  box.innerHTML = songs.map((s) => {
+    const playBtn = me.isAdmin ? '<button class="secondary" data-act="playsong" data-filename="' + esc(s) + '">Play to me</button>' : '';
+    return '<div class="row"><span class="meta">' + esc(s) + '</span><div class="controls">' + playBtn + '</div></div>';
+  }).join('');
+  box.querySelectorAll('button[data-act="playsong"]').forEach((btn) => btn.addEventListener('click', onSongAction));
+}
+
+async function onSongAction(ev) {
+  const btn = ev.currentTarget;
+  const filename = btn.dataset.filename;
+  btn.disabled = true;
+  try {
+    await post('/api/play', { filename, targets: ['self'] });
+    await refreshAll();
+  } catch (e) {
+    alert(e.message);
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 function renderPlaylists() {

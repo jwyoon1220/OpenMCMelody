@@ -7,6 +7,8 @@ import com.mojang.brigadier.tree.LiteralCommandNode
 import io.github.jwyoon1220.openMCMelody.Permissions
 import io.github.jwyoon1220.openMCMelody.midi.BukkitExecutors
 import io.github.jwyoon1220.openMCMelody.midi.SongCache
+import io.github.jwyoon1220.openMCMelody.playback.PlayMode
+import io.github.jwyoon1220.openMCMelody.playback.PlayModeManager
 import io.github.jwyoon1220.openMCMelody.playback.PlaybackManager
 import io.github.jwyoon1220.openMCMelody.playback.PlaybackSession
 import io.github.jwyoon1220.openMCMelody.playback.PlaybackState
@@ -45,6 +47,7 @@ class MidiCommand(
     private val soundfontsFolder: File,
     private val soundpacksFolder: File,
     private val soundFontConverter: SoundFontConverter,
+    private val playModeManager: PlayModeManager,
 ) {
     private val mainThreadExecutor: Executor = BukkitExecutors.main(plugin)
 
@@ -113,6 +116,13 @@ class MidiCommand(
                             .requires { it.sender.hasPermission(PERM_ADMIN) }
                             .executes { handleResume(it, true) },
                     ),
+            )
+            .then(
+                Commands.literal("mode")
+                    .requires { it.sender.hasPermission(PERM_STATUS) }
+                    .executes { handleShowMode(it) }
+                    .then(Commands.literal("tick").executes { handleSetMode(it, PlayMode.TICK) })
+                    .then(Commands.literal("instant").executes { handleSetMode(it, PlayMode.INSTANT) }),
             )
             .then(
                 Commands.literal("playlist")
@@ -344,6 +354,34 @@ class MidiCommand(
         val totalListeners = affected.sumOf { it.targets.size }
         val extra = (totalListeners - targets.size).coerceAtLeast(0)
         return "$verb playback for ${targets.size} target(s)." + if (extra > 0) " (affects $extra other listener(s) sharing the same session)" else ""
+    }
+
+    // ---- play mode ----
+
+    private fun handleShowMode(ctx: CommandContext<CommandSourceStack>): Int {
+        val sender = ctx.source.sender
+        val player = sender as? Player ?: run {
+            sender.sendMessage("Only an in-game player has a playback mode.")
+            return Command.SINGLE_SUCCESS
+        }
+        sender.sendMessage("Your playback mode: ${modeLabel(playModeManager.modeOf(player.uniqueId))}. Change with /midi mode <tick|instant>.")
+        return Command.SINGLE_SUCCESS
+    }
+
+    private fun handleSetMode(ctx: CommandContext<CommandSourceStack>, mode: PlayMode): Int {
+        val sender = ctx.source.sender
+        val player = sender as? Player ?: run {
+            sender.sendMessage("Only an in-game player can set a playback mode.")
+            return Command.SINGLE_SUCCESS
+        }
+        playModeManager.setMode(player.uniqueId, mode)
+        sender.sendMessage("Playback mode set to ${modeLabel(mode)}.")
+        return Command.SINGLE_SUCCESS
+    }
+
+    private fun modeLabel(mode: PlayMode): String = when (mode) {
+        PlayMode.TICK -> "tick (default - locked to the server's 50ms tick)"
+        PlayMode.INSTANT -> "instant (fires each note at its real timing, not tick-locked)"
     }
 
     // ---- playlist ----
