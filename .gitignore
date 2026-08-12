@@ -1,0 +1,13 @@
+# 프로젝트 제외 경로
+/.gradle/
+/build/
+/.kotlin/
+classpath.txt
+
+# Local Paper test server (run-paper plugin) - world data, logs, ops/bans, EULA, generated
+# soundpacks/playlists, etc. None of this belongs in the plugin's source repo.
+/run/
+
+# OS/editor cruft
+.DS_Store
+*.swp

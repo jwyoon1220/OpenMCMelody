@@ -1,0 +1,421 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OpenMCMelody</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #14161c;
+    --panel: #1c1f27;
+    --panel-2: #242835;
+    --border: #333846;
+    --text: #e7e9ee;
+    --muted: #9aa0ae;
+    --accent: #6ea8fe;
+    --accent-2: #4c7fd4;
+    --ok: #5fd68a;
+    --warn: #f2c14e;
+    --danger: #f27272;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+    background: var(--panel);
+  }
+  header h1 { font-size: 18px; margin: 0; }
+  header .who { font-size: 13px; color: var(--muted); display: flex; gap: 10px; align-items: center; }
+  .badge {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: var(--accent-2);
+    color: #fff;
+  }
+  main { max-width: 1100px; margin: 0 auto; padding: 20px; display: none; }
+  main.visible { display: block; }
+  #login-screen {
+    max-width: 380px;
+    margin: 60px auto;
+    padding: 24px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+  }
+  #login-screen h2 { margin-top: 0; font-size: 17px; }
+  #login-screen p { color: var(--muted); font-size: 13px; line-height: 1.5; }
+  input, select, button {
+    font: inherit;
+    color: var(--text);
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 7px 10px;
+  }
+  input, select { width: 100%; margin-bottom: 10px; }
+  button {
+    cursor: pointer;
+    background: var(--accent-2);
+    border-color: var(--accent-2);
+    color: #fff;
+    transition: background 0.15s;
+  }
+  button:hover { background: var(--accent); }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.secondary { background: var(--panel-2); border-color: var(--border); color: var(--text); }
+  button.secondary:hover { background: #2c3140; }
+  button.danger { background: #5a2a2a; border-color: #7a3838; }
+  button.danger:hover { background: #7a3838; }
+  .code-box {
+    font-size: 30px;
+    letter-spacing: 6px;
+    text-align: center;
+    padding: 14px;
+    margin: 14px 0;
+    background: var(--panel-2);
+    border: 1px dashed var(--accent);
+    border-radius: 8px;
+    color: var(--accent);
+  }
+  .status-line { font-size: 13px; color: var(--muted); min-height: 18px; }
+  .grid { display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 16px; align-items: start; }
+  @media (max-width: 800px) { .grid { grid-template-columns: 1fr; } }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 16px;
+  }
+  .panel h2 { font-size: 15px; margin: 0 0 12px; color: var(--text); }
+  .row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+  }
+  .row:last-child { border-bottom: none; }
+  .row .name { font-weight: 600; min-width: 90px; }
+  .row .meta { font-size: 12px; color: var(--muted); flex: 1 1 180px; }
+  .row .controls { display: flex; gap: 6px; flex-wrap: wrap; }
+  .empty { color: var(--muted); font-size: 13px; padding: 6px 0; }
+  .progress {
+    height: 4px;
+    background: var(--panel-2);
+    border-radius: 2px;
+    overflow: hidden;
+    margin-top: 4px;
+  }
+  .progress > div { height: 100%; background: var(--ok); }
+  .playlist-block { border: 1px solid var(--border); border-radius: 8px; padding: 10px; margin-bottom: 10px; }
+  .playlist-block .head { display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
+  .playlist-block .songs { margin-top: 8px; font-size: 13px; }
+  .playlist-block .songs .srow { display: flex; justify-content: space-between; padding: 3px 0; color: var(--muted); }
+  .inline-form { display: flex; gap: 6px; margin-top: 8px; }
+  .inline-form select, .inline-form input { margin-bottom: 0; }
+  .error-text { color: var(--danger); font-size: 13px; margin-top: 6px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🎵 OpenMCMelody</h1>
+  <div class="who" id="who-box" style="display:none;">
+    <span id="who-name"></span>
+    <span class="badge" id="who-admin" style="display:none;">ADMIN</span>
+    <button class="secondary" id="logout-btn">Log out</button>
+  </div>
+</header>
+
+<div id="login-screen">
+  <h2>Log in with your Minecraft account</h2>
+  <p>Enter your in-game username, then type the code shown here into Minecraft chat as <code>/midi verify &lt;code&gt;</code>. Only the real player with that name can complete the login.</p>
+  <div id="login-form">
+    <input id="username-input" placeholder="Minecraft username" maxlength="16" autocomplete="off">
+    <button id="start-login-btn">Get code</button>
+  </div>
+  <div id="code-area" style="display:none;">
+    <div class="code-box" id="code-text"></div>
+    <p>Run <code>/midi verify <span id="code-inline"></span></code> in-game. This page updates automatically.</p>
+    <div class="status-line" id="login-status">Waiting for verification...</div>
+  </div>
+  <div class="error-text" id="login-error"></div>
+</div>
+
+<main id="dashboard">
+  <div class="grid">
+    <div>
+      <div class="panel">
+        <h2>Online players</h2>
+        <div id="players-list"><div class="empty">Loading...</div></div>
+      </div>
+    </div>
+    <div>
+      <div class="panel">
+        <h2>Playlists</h2>
+        <div id="playlists-list"><div class="empty">Loading...</div></div>
+        <div class="inline-form">
+          <input id="new-playlist-name" placeholder="New playlist name">
+          <button id="create-playlist-btn">Create</button>
+        </div>
+      </div>
+      <div class="panel">
+        <h2>MIDI files</h2>
+        <div id="songs-list"><div class="empty">Loading...</div></div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let me = null; // { playerName, uuid, isAdmin }
+let songs = [];
+let playlists = [];
+let loginPollTimer = null;
+let dashPollTimer = null;
+
+async function api(path, opts) {
+  const res = await fetch(path, Object.assign({ credentials: 'same-origin', headers: { 'Content-Type': 'application/json' } }, opts));
+  let body = null;
+  try { body = await res.json(); } catch (e) {}
+  if (!res.ok) throw new Error((body && body.error) || ('HTTP ' + res.status));
+  return body;
+}
+const get = (path) => api(path);
+const post = (path, data) => api(path, { method: 'POST', body: JSON.stringify(data || {}) });
+const del = (path) => api(path, { method: 'DELETE' });
+
+// ---- login flow ----
+
+$('start-login-btn').addEventListener('click', async () => {
+  const username = $('username-input').value.trim();
+  $('login-error').textContent = '';
+  if (!username) { $('login-error').textContent = 'Enter a username.'; return; }
+  try {
+    const res = await post('/api/login/start', { username });
+    $('code-text').textContent = res.code;
+    $('code-inline').textContent = res.code;
+    $('login-form').style.display = 'none';
+    $('code-area').style.display = 'block';
+    pollLoginStatus();
+  } catch (e) {
+    $('login-error').textContent = e.message;
+  }
+});
+
+function pollLoginStatus() {
+  clearTimeout(loginPollTimer);
+  const tick = async () => {
+    try {
+      const res = await get('/api/login/status');
+      if (res.status === 'verified') {
+        $('login-status').textContent = 'Verified! Loading...';
+        location.reload();
+        return;
+      } else if (res.status === 'expired') {
+        $('login-status').textContent = 'Code expired. Refresh the page to try again.';
+        return;
+      }
+    } catch (e) { /* ignore transient errors while polling */ }
+    loginPollTimer = setTimeout(tick, 2000);
+  };
+  tick();
+}
+
+$('logout-btn').addEventListener('click', async () => {
+  try { await post('/api/logout'); } catch (e) {}
+  location.reload();
+});
+
+// ---- dashboard ----
+
+async function boot() {
+  try {
+    me = await get('/api/me');
+  } catch (e) {
+    $('login-screen').style.display = 'block';
+    return;
+  }
+  $('login-screen').style.display = 'none';
+  $('who-box').style.display = 'flex';
+  $('who-name').textContent = me.playerName;
+  $('who-admin').style.display = me.isAdmin ? 'inline-block' : 'none';
+  $('dashboard').classList.add('visible');
+  await refreshAll();
+  dashPollTimer = setInterval(refreshAll, 2000);
+}
+
+async function refreshAll() {
+  try {
+    const [playersRes, songsRes, playlistsRes] = await Promise.all([get('/api/players'), get('/api/songs'), get('/api/playlists')]);
+    songs = songsRes;
+    playlists = playlistsRes;
+    const statuses = await Promise.all(playersRes.map((p) => get('/api/status?target=' + p.uuid).catch(() => ({ playing: false }))));
+    renderPlayers(playersRes, statuses);
+    renderSongs();
+    renderPlaylists();
+  } catch (e) { /* transient - next poll will retry */ }
+}
+
+function canControl(uuid) { return me.isAdmin || uuid === me.uuid; }
+
+function fmtTime(ticks) {
+  const s = Math.floor(ticks / 20);
+  return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+}
+
+function playlistOptions() {
+  return playlists.map((p) => '<option value="' + esc(p.name) + '">' + esc(p.name) + ' (' + p.songCount + ')</option>').join('');
+}
+function songOptions() {
+  return songs.map((s) => '<option value="' + esc(s) + '">' + esc(s) + '</option>').join('');
+}
+function esc(s) { return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+
+function renderPlayers(players, statuses) {
+  const box = $('players-list');
+  if (players.length === 0) { box.innerHTML = '<div class="empty">No players online.</div>'; return; }
+  box.innerHTML = players.map((p, i) => {
+    const st = statuses[i] || { playing: false };
+    const control = canControl(p.uuid);
+    let meta;
+    if (st.playing) {
+      const pct = st.totalTicks > 0 ? Math.min(100, Math.round((st.elapsedTicks / st.totalTicks) * 100)) : 0;
+      const label = st.mode === 'PLAYLIST' ? ('playlist "' + esc(st.playlistName) + '" (' + st.playlistIndex + '/' + st.playlistSize + ') - ' + esc(st.song)) : esc(st.song);
+      const stateSuffix = st.state === 'PAUSED' ? ' (paused)' : st.state === 'LOADING' ? ' (loading)' : '';
+      meta = label + stateSuffix + ' - ' + fmtTime(st.elapsedTicks) + '/' + fmtTime(st.totalTicks) + '<div class="progress"><div style="width:' + pct + '%"></div></div>';
+    } else {
+      meta = 'Not listening to anything.';
+    }
+    const pauseResumeBtn = st.playing
+      ? '<button class="secondary" data-act="' + (st.state === 'PAUSED' ? 'resume' : 'pause') + '" data-uuid="' + p.uuid + '" ' + (control ? '' : 'disabled') + '>' + (st.state === 'PAUSED' ? 'Resume' : 'Pause') + '</button>'
+      : '';
+    const stopBtn = me.isAdmin ? '<button class="danger" data-act="stop" data-uuid="' + p.uuid + '">Stop</button>' : '';
+    const playSongForm = me.isAdmin
+      ? '<select data-song-target="' + p.uuid + '">' + songOptions() + '</select><button data-act="playsong" data-uuid="' + p.uuid + '">Play song</button>'
+      : '';
+    const playPlaylistForm = playlists.length > 0
+      ? '<select data-playlist-target="' + p.uuid + '">' + playlistOptions() + '</select><button data-act="playplaylist" data-uuid="' + p.uuid + '">Play playlist</button>'
+      : '';
+    return '<div class="row"><span class="name">' + esc(p.name) + '</span><span class="meta">' + meta + '</span>' +
+      '<div class="controls">' + pauseResumeBtn + stopBtn + '</div></div>' +
+      '<div class="row" style="padding-top:0;"><div class="controls">' + playSongForm + playPlaylistForm + '</div></div>';
+  }).join('');
+
+  box.querySelectorAll('button[data-act]').forEach((btn) => btn.addEventListener('click', onPlayerAction));
+}
+
+async function onPlayerAction(ev) {
+  const btn = ev.currentTarget;
+  const act = btn.dataset.act;
+  const uuid = btn.dataset.uuid;
+  btn.disabled = true;
+  try {
+    if (act === 'pause') await post('/api/pause', { targets: [uuid] });
+    else if (act === 'resume') await post('/api/resume', { targets: [uuid] });
+    else if (act === 'stop') await post('/api/stop', { targets: [uuid] });
+    else if (act === 'playsong') {
+      const sel = document.querySelector('select[data-song-target="' + uuid + '"]');
+      if (sel && sel.value) await post('/api/play', { filename: sel.value, targets: [uuid] });
+    } else if (act === 'playplaylist') {
+      const sel = document.querySelector('select[data-playlist-target="' + uuid + '"]');
+      if (sel && sel.value) await post('/api/playlists/' + encodeURIComponent(sel.value) + '/play', { targets: [uuid] });
+    }
+    await refreshAll();
+  } catch (e) {
+    alert(e.message);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function renderSongs() {
+  const box = $('songs-list');
+  box.innerHTML = songs.length === 0 ? '<div class="empty">No .mid files in the midi/ folder.</div>' : songs.map((s) => '<div class="row"><span class="meta">' + esc(s) + '</span></div>').join('');
+}
+
+function renderPlaylists() {
+  const box = $('playlists-list');
+  if (playlists.length === 0) { box.innerHTML = '<div class="empty">No playlists yet.</div>'; return; }
+  box.innerHTML = playlists.map((p) => {
+    return '<div class="playlist-block" data-name="' + esc(p.name) + '">' +
+      '<div class="head"><strong>' + esc(p.name) + '</strong><span class="meta">' + p.songCount + ' song(s)</span></div>' +
+      '<div class="controls" style="margin-top:8px;">' +
+        '<button class="secondary" data-act="playtoself" data-name="' + esc(p.name) + '">Play to me</button>' +
+        '<button class="danger" data-act="deleteplaylist" data-name="' + esc(p.name) + '">Delete</button>' +
+      '</div>' +
+      '<div class="songs" id="pl-songs-' + esc(p.name) + '"></div>' +
+      '<div class="inline-form">' +
+        '<select data-add-song="' + esc(p.name) + '">' + songOptions() + '</select>' +
+        '<button data-act="addsong" data-name="' + esc(p.name) + '">Add</button>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+
+  box.querySelectorAll('button[data-act]').forEach((btn) => btn.addEventListener('click', onPlaylistAction));
+
+  playlists.forEach(async (p) => {
+    try {
+      const detail = await get('/api/playlists/' + encodeURIComponent(p.name));
+      const el = $('pl-songs-' + p.name);
+      if (!el) return;
+      el.innerHTML = detail.songs.length === 0 ? '<div class="empty">Empty.</div>' : detail.songs.map((s, i) =>
+        '<div class="srow"><span>' + (i + 1) + '. ' + esc(s) + '</span><button class="secondary" data-act="removesong" data-name="' + esc(p.name) + '" data-entry="' + (i + 1) + '">Remove</button></div>'
+      ).join('');
+      el.querySelectorAll('button[data-act="removesong"]').forEach((btn) => btn.addEventListener('click', onPlaylistAction));
+    } catch (e) {}
+  });
+}
+
+async function onPlaylistAction(ev) {
+  const btn = ev.currentTarget;
+  const act = btn.dataset.act;
+  const name = btn.dataset.name;
+  btn.disabled = true;
+  try {
+    if (act === 'playtoself') await post('/api/playlists/' + encodeURIComponent(name) + '/play', { targets: ['self'] });
+    else if (act === 'deleteplaylist') { if (confirm('Delete playlist "' + name + '"?')) await del('/api/playlists/' + encodeURIComponent(name)); }
+    else if (act === 'addsong') {
+      const sel = document.querySelector('select[data-add-song="' + name + '"]');
+      if (sel && sel.value) await post('/api/playlists/' + encodeURIComponent(name) + '/songs', { filename: sel.value });
+    } else if (act === 'removesong') {
+      await del('/api/playlists/' + encodeURIComponent(name) + '/songs/' + encodeURIComponent(btn.dataset.entry));
+    }
+    await refreshAll();
+  } catch (e) {
+    alert(e.message);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+$('create-playlist-btn').addEventListener('click', async () => {
+  const name = $('new-playlist-name').value.trim();
+  if (!name) return;
+  try {
+    await post('/api/playlists', { name });
+    $('new-playlist-name').value = '';
+    await refreshAll();
+  } catch (e) {
+    alert(e.message);
+  }
+});
+
+boot();
+</script>
+</body>
+</html>

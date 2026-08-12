@@ -1,0 +1,23 @@
+# OpenMCMelody web control panel.
+# Binding to 0.0.0.0 exposes this to every network interface on the machine - make sure your
+# firewall/router only allows access from where you actually want it. The panel is plain HTTP
+# (no TLS); put it behind a reverse proxy if you need HTTPS.
+web:
+  enabled: true
+  bind: '0.0.0.0'
+  # public-url is what player CLIENTS use to reach this server's web server (0.0.0.0 above is
+  # only a bind address, not something a client can connect to). Required for `/midi soundpack
+  # activate` to work, since Minecraft resource packs are downloaded by the client over HTTP from
+  # this URL. MUST include the port below (a bare host defaults to port 80, which nothing is
+  # listening on here) - the resource pack download just silently fails otherwise.
+  # Same machine as the client (local testing): 'http://localhost:8080'
+  # Real server:                                'http://play.example.com:8080' or 'http://203.0.113.10:8080'
+  public-url: ''
+  port: 8080
+
+# /midi soundpack fromsf2 - auto-builds a soundpack from a .sf2/.dls file dropped into
+# soundfonts/. Requires ffmpeg on this machine (only the JDK's built-in MIDI synth is used for
+# rendering; the JDK cannot itself encode Ogg Vorbis, which Minecraft resource packs require).
+soundfont:
+  # Path to the ffmpeg executable, or just 'ffmpeg' if it's on this server's PATH.
+  ffmpeg-path: 'ffmpeg'

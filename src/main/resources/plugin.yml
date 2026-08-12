@@ -1,0 +1,17 @@
+name: OpenMCMelody
+version: '${version}'
+
+main: io.github.jwyoon1220.openMCMelody.OpenMCMelody
+api-version: '26.2'
+load: POSTWORLD
+
+permissions:
+  openmcmelody.midi.admin:
+    description: List, play and stop MIDI songs for any player, and check any player's status.
+    default: op
+  openmcmelody.midi.playlist:
+    description: Manage and play shared MIDI playlists.
+    default: true
+  openmcmelody.midi.status:
+    description: Check your own current MIDI playback status.
+    default: true
