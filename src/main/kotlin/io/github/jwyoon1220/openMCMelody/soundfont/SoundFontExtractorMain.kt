@@ -28,9 +28,10 @@ private const val PERCUSSION_TOTAL_SECONDS = 1.2
  * own server JVM is never started with that flag, and the module system otherwise blocks casting
  * to the internal `AudioSynthesizer` type needed for offline (non-realtime) rendering.
  *
- * Args: `<soundFontFile> <outputDir>`. Writes `<outputDir>/<slot>.wav` for every GM instrument the
- * soundfont actually has an instrument for, plus `<outputDir>/manifest.txt` (one `slot<TAB>file`
- * line per rendered sample) so the caller knows what succeeded without parsing stdout.
+ * Args: `<soundFontFile> <outputDir>`. Writes `<outputDir>/<slot>.wav` for every (GM instrument,
+ * octave bucket) pair the soundfont actually has an instrument for - see [GmNames] - plus
+ * `<outputDir>/manifest.txt` (one `slot<TAB>file` line per rendered sample) so the caller knows
+ * what succeeded without parsing stdout.
  *
  * Real-world SoundFonts occasionally trigger bugs in the JDK's bundled software synthesizer
  * (e.g. `ArrayIndexOutOfBoundsException` deep in `SoftLinearResampler2` for certain samples/loop
@@ -78,9 +79,16 @@ object SoundFontExtractorMain {
             }
         }
 
+        // One sample per octave bucket per instrument (not one sample for the whole range) - see
+        // GmNames.octaveCenterNote - so no sample ever needs to pitch-shift more than ~half an
+        // octave to cover its bucket, which matters across a full 88-key piano range.
         for (program in 0 until 128) {
             if (program !in availablePrograms) continue
-            renderSlot(GmNames.MELODIC[program], percussion = false, program = program, note = 60)
+            for (octave in 0 until GmNames.OCTAVE_COUNT) {
+                val slot = GmNames.octaveSlotKey(GmNames.MELODIC[program], octave)
+                val centerNote = GmNames.octaveCenterNote(octave)
+                renderSlot(slot, percussion = false, program = program, note = centerNote)
+            }
         }
         for ((note, slot) in GmNames.PERCUSSION) {
             renderSlot(slot, percussion = true, program = -1, note = note)

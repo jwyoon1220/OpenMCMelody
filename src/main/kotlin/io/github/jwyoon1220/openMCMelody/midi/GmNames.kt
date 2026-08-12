@@ -54,6 +54,18 @@ object GmNames {
         56 to "cow_bell",
     )
 
+    // Each melodic instrument is split into per-octave sample slots (see InstrumentSlot's class
+    // doc) - a 12-semitone bucket only ever needs to pitch-shift by at most half an octave,
+    // unlike one sample stretched across the whole playable range (e.g. 88 piano keys).
+    const val OCTAVE_SIZE = 12
+    const val OCTAVE_COUNT = 11 // covers the full MIDI note range 0-127
+
+    fun octaveOf(note: Int): Int = (note.coerceIn(0, 127) / OCTAVE_SIZE).coerceIn(0, OCTAVE_COUNT - 1)
+
+    fun octaveCenterNote(octave: Int): Int = octave * OCTAVE_SIZE + OCTAVE_SIZE / 2
+
+    fun octaveSlotKey(instrumentKey: String, octave: Int): String = "${instrumentKey}_oct$octave"
+
     init {
         check(MELODIC.size == 128) { "Expected 128 GM instrument names, found ${MELODIC.size}" }
     }

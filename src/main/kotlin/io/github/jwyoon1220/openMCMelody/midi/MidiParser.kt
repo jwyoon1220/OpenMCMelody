@@ -47,10 +47,18 @@ object MidiParser {
             else tempoChangeElapsedUs + (tick - tempoChangeTick) * usPerTick
 
         val channelProgram = IntArray(16)
+        // Dynamics (셈여림) are frequently authored as CC7/CC11 automation curves rather than
+        // per-note velocity - especially in MIDI exported from notation software (crescendo/
+        // diminuendo/forte/piano marks), where velocity is often left flat. Both default to full
+        // scale (not the sometimes-quoted GM default of 100/127) since a file that never sends
+        // either shouldn't be quietened just because we assumed otherwise.
+        val channelVolume = FloatArray(16) { 1.0f } // CC7
+        val channelExpression = FloatArray(16) { 1.0f } // CC11
 
         var tickBuf = IntArray(1024)
         var soundBuf = arrayOfNulls<InstrumentSlot>(1024)
-        var pitchBuf = FloatArray(1024)
+        var vanillaPitchBuf = FloatArray(1024)
+        var customPitchBuf = FloatArray(1024)
         var volumeBuf = FloatArray(1024)
         var count = 0
         var maxTick = 0
@@ -60,7 +68,8 @@ object MidiParser {
                 val newSize = (tickBuf.size * 2).coerceAtLeast(needed)
                 tickBuf = tickBuf.copyOf(newSize)
                 soundBuf = soundBuf.copyOf(newSize)
-                pitchBuf = pitchBuf.copyOf(newSize)
+                vanillaPitchBuf = vanillaPitchBuf.copyOf(newSize)
+                customPitchBuf = customPitchBuf.copyOf(newSize)
                 volumeBuf = volumeBuf.copyOf(newSize)
             }
         }
@@ -91,13 +100,21 @@ object MidiParser {
                 continue
             }
 
+            if (message.command == ShortMessage.CONTROL_CHANGE) {
+                when (message.data1) {
+                    7 -> channelVolume[message.channel] = message.data2 / 127f
+                    11 -> channelExpression[message.channel] = message.data2 / 127f
+                }
+                continue
+            }
+
             if (message.command != ShortMessage.NOTE_ON) continue
             val velocity = message.data2
             if (velocity <= 0) continue // velocity-0 NOTE_ON is a de facto note-off
 
             val note = message.data1
             val channel = message.channel
-            val (sound, pitch) = if (channel == PERCUSSION_CHANNEL) {
+            val resolution = if (channel == PERCUSSION_CHANNEL) {
                 GmInstrumentMap.percussion(note)
             } else {
                 GmInstrumentMap.melodic(channelProgram[channel], note)
@@ -106,11 +123,14 @@ object MidiParser {
             val mcTick = Math.round(elapsedMicrosAt(indexed.tick) / MC_TICK_MICROS).toInt()
             if (mcTick > maxTick) maxTick = mcTick
 
+            val dynamics = (velocity / 127f) * channelVolume[channel] * channelExpression[channel]
+
             ensureCapacity(count + 1)
             tickBuf[count] = mcTick
-            soundBuf[count] = sound
-            pitchBuf[count] = pitch
-            volumeBuf[count] = (velocity / 127f).coerceIn(0.2f, 1.0f)
+            soundBuf[count] = resolution.slot
+            vanillaPitchBuf[count] = resolution.vanillaPitch
+            customPitchBuf[count] = resolution.customPitch
+            volumeBuf[count] = dynamics.coerceIn(0.2f, 1.0f)
             count++
         }
 
@@ -118,7 +138,8 @@ object MidiParser {
             sourceFileName = file.name,
             tick = tickBuf.copyOf(count),
             sound = Array(count) { soundBuf[it]!! },
-            pitch = pitchBuf.copyOf(count),
+            vanillaPitch = vanillaPitchBuf.copyOf(count),
+            customPitch = customPitchBuf.copyOf(count),
             volume = volumeBuf.copyOf(count),
             totalTicks = maxTick,
         )

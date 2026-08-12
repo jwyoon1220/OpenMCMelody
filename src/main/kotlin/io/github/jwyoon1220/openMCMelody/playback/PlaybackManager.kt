@@ -38,7 +38,8 @@ class PlaybackManager(
 
     // Reusable per-tick scratch buffers (dedupe + polyphony cap), avoids allocating every tick.
     private var batchSlot = arrayOfNulls<InstrumentSlot>(32)
-    private var batchPitch = FloatArray(32)
+    private var batchVanillaPitch = FloatArray(32)
+    private var batchCustomPitch = FloatArray(32)
     private var batchVolume = FloatArray(32)
     private var batchSize = 0
 
@@ -103,7 +104,7 @@ class PlaybackManager(
             val song = session.song
             while (session.nextEventIndex < song.size && song.tick[session.nextEventIndex] <= session.cursorTick) {
                 val idx = session.nextEventIndex
-                batchAdd(song.sound[idx], song.pitch[idx], song.volume[idx])
+                batchAdd(song.sound[idx], song.vanillaPitch[idx], song.customPitch[idx], song.volume[idx])
                 session.nextEventIndex++
             }
             if (batchSize > 0) flushBatch(session.targets)
@@ -127,9 +128,12 @@ class PlaybackManager(
         }
     }
 
-    private fun batchAdd(slot: InstrumentSlot, pitch: Float, volume: Float) {
+    private fun batchAdd(slot: InstrumentSlot, vanillaPitch: Float, customPitch: Float, volume: Float) {
+        // Dedupe key is (slot, vanillaPitch): slot already distinguishes octave bucket, and within
+        // a bucket vanillaPitch and customPitch move together (both derived from the same note),
+        // so this can't merge two notes that would actually use different customPitch values.
         for (i in 0 until batchSize) {
-            if (batchSlot[i] === slot && batchPitch[i] == pitch) {
+            if (batchSlot[i] === slot && batchVanillaPitch[i] == vanillaPitch) {
                 if (volume > batchVolume[i]) batchVolume[i] = volume
                 return
             }
@@ -137,11 +141,13 @@ class PlaybackManager(
         if (batchSlot.size <= batchSize) {
             val newSize = batchSlot.size * 2
             batchSlot = batchSlot.copyOf(newSize)
-            batchPitch = batchPitch.copyOf(newSize)
+            batchVanillaPitch = batchVanillaPitch.copyOf(newSize)
+            batchCustomPitch = batchCustomPitch.copyOf(newSize)
             batchVolume = batchVolume.copyOf(newSize)
         }
         batchSlot[batchSize] = slot
-        batchPitch[batchSize] = pitch
+        batchVanillaPitch[batchSize] = vanillaPitch
+        batchCustomPitch[batchSize] = customPitch
         batchVolume[batchSize] = volume
         batchSize++
     }
@@ -151,25 +157,25 @@ class PlaybackManager(
             val order = (0 until batchSize).sortedByDescending { batchVolume[it] }
             for (i in 0 until MAX_NOTES_PER_TICK) {
                 val idx = order[i]
-                playToTargets(targets, batchSlot[idx]!!, batchPitch[idx], batchVolume[idx])
+                playToTargets(targets, batchSlot[idx]!!, batchVanillaPitch[idx], batchCustomPitch[idx], batchVolume[idx])
             }
         } else {
             for (i in 0 until batchSize) {
-                playToTargets(targets, batchSlot[i]!!, batchPitch[i], batchVolume[i])
+                playToTargets(targets, batchSlot[i]!!, batchVanillaPitch[i], batchCustomPitch[i], batchVolume[i])
             }
         }
         batchSize = 0
     }
 
-    private fun playToTargets(targets: Set<UUID>, slot: InstrumentSlot, pitch: Float, volume: Float) {
+    private fun playToTargets(targets: Set<UUID>, slot: InstrumentSlot, vanillaPitch: Float, customPitch: Float, volume: Float) {
         // Resolved once per note (not per target) - the active soundpack can't change mid-flush.
         val customKey = soundPackManager.resolve(slot)
         for (uuid in targets) {
             val player = Bukkit.getPlayer(uuid) ?: continue
             if (customKey != null) {
-                player.playSound(player.location, customKey, volume, pitch)
+                player.playSound(player.location, customKey, volume, customPitch)
             } else {
-                player.playSound(player.location, slot.vanilla, volume, pitch)
+                player.playSound(player.location, slot.vanilla, volume, vanillaPitch)
             }
         }
     }
