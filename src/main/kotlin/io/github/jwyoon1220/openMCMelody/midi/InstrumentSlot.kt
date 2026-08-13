@@ -18,7 +18,37 @@ import org.bukkit.Sound
  * `PlaybackManager`'s per-tick note dedup) stays valid: the same (program, octave) or percussion
  * note always resolves to the exact same object.
  */
-class InstrumentSlot private constructor(val key: String, val vanilla: Sound) {
+class InstrumentSlot private constructor(val key: String, val vanilla: Sound, val program: Int) {
+
+    /** True for the percussion slots ([BASEDRUM]/[SNARE]/[HAT]/[COW_BELL]), which carry no GM [program]. */
+    val isPercussion: Boolean get() = program < 0
+
+    /**
+     * How long a sample rendered for this slot naturally plays before it runs out of recorded
+     * audio - see [GmNames.MELODIC_SAMPLE_SECONDS]/[GmNames.PERCUSSION_SAMPLE_SECONDS]/
+     * [GmNames.SUSTAINED_SAMPLE_SECONDS]. Used by
+     * [io.github.jwyoon1220.openMCMelody.playback.PlaybackManager] to decide whether a note's real
+     * MIDI duration already fits inside the sample or needs an explicit stopSound cutoff.
+     */
+    fun naturalSampleSeconds(): Double = when {
+        isPercussion -> GmNames.PERCUSSION_SAMPLE_SECONDS
+        GmNames.sustains(program) -> GmNames.SUSTAINED_SAMPLE_SECONDS
+        else -> GmNames.MELODIC_SAMPLE_SECONDS
+    }
+
+    /**
+     * Whether a short-held note on this slot should get an explicit stopSound cutoff at all.
+     * Minecraft's stopSound has no fade/volume envelope - it's always an instant, hard silence -
+     * so paying that cost is only worth it for [GmNames.SUSTAINING_PROGRAMS] (organ/strings/brass/
+     * pad/etc.), which hold at a flat, undecaying volume for as long as a real performer keeps
+     * playing them and would otherwise visibly get "stuck" ringing for their full multi-second
+     * captured length. Everything else (piano, guitar, mallets, bass, percussion, ...) already has
+     * a natural decay/release baked into its own recorded sample (see [SoundFontExtractorMain]'s
+     * hold-then-release capture) and sounds better left to simply decay on its own - like a real
+     * piano string keeps ringing after the key is released - than hard-cut at the exact MIDI
+     * note-off, which otherwise chops off a still-sustained, undecayed sound on every single note.
+     */
+    fun needsExplicitCutoff(): Boolean = !isPercussion && GmNames.sustains(program)
 
     companion object {
         // Vanilla Sound fallback per GM instrument family (program ranges of 8) - unchanged from
@@ -46,14 +76,14 @@ class InstrumentSlot private constructor(val key: String, val vanilla: Sound) {
         // MELODIC[program][octaveBucket]
         private val MELODIC: Array<Array<InstrumentSlot>> = Array(128) { program ->
             Array(GmNames.OCTAVE_COUNT) { octave ->
-                InstrumentSlot(GmNames.octaveSlotKey(GmNames.MELODIC[program], octave), FAMILY_VANILLA[program / 8])
+                InstrumentSlot(GmNames.octaveSlotKey(GmNames.MELODIC[program], octave), FAMILY_VANILLA[program / 8], program)
             }
         }
 
-        val BASEDRUM = InstrumentSlot("basedrum", Sound.BLOCK_NOTE_BLOCK_BASEDRUM)
-        val SNARE = InstrumentSlot("snare", Sound.BLOCK_NOTE_BLOCK_SNARE)
-        val HAT = InstrumentSlot("hat", Sound.BLOCK_NOTE_BLOCK_HAT)
-        val COW_BELL = InstrumentSlot("cow_bell", Sound.BLOCK_NOTE_BLOCK_COW_BELL)
+        val BASEDRUM = InstrumentSlot("basedrum", Sound.BLOCK_NOTE_BLOCK_BASEDRUM, -1)
+        val SNARE = InstrumentSlot("snare", Sound.BLOCK_NOTE_BLOCK_SNARE, -1)
+        val HAT = InstrumentSlot("hat", Sound.BLOCK_NOTE_BLOCK_HAT, -1)
+        val COW_BELL = InstrumentSlot("cow_bell", Sound.BLOCK_NOTE_BLOCK_COW_BELL, -1)
 
         val entries: List<InstrumentSlot> = MELODIC.flatMap { it.toList() } + listOf(BASEDRUM, SNARE, HAT, COW_BELL)
 

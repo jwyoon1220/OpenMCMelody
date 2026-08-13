@@ -54,6 +54,37 @@ object GmNames {
         56 to "cow_bell",
     )
 
+    // GM program numbers (0-indexed, matching MELODIC above) whose real instrument holds a tone
+    // for as long as a performer keeps blowing/bowing/pressing a key - organs, bowed strings, brass,
+    // reed/pipe woodwinds, vocal pads, synth leads/pads - as opposed to one that's struck/plucked
+    // and decays on its own (piano, guitar, mallets, most "ethnic"/percussive instruments). Used by
+    // [io.github.jwyoon1220.openMCMelody.soundfont.SoundFontExtractorMain] to capture a longer
+    // sample for these, since Minecraft's playSound has no loop/sustain of its own - a note held
+    // longer than the captured clip simply runs out of recorded audio.
+    //
+    // Deliberately excludes a few instruments that share a GM range with sustaining ones but are
+    // themselves struck/plucked: pizzicato_strings(45), orchestral_harp(46), timpani(47) within the
+    // strings range, and orchestra_hit(55) within the ensemble range.
+    val SUSTAINING_PROGRAMS: Set<Int> = (
+        (16..23) + // organ, accordion, harmonica
+            (40..44) + // bowed strings: violin, viola, cello, contrabass, tremolo_strings
+            (48..54) + // string/synth ensembles + choir_aahs/voice_oohs/synth_voice
+            (56..95) + // brass, sax, reed woodwinds, pipe, synth lead, synth pad
+            listOf(109, 110, 111) // bag_pipe, fiddle, shanai
+        ).toSet()
+
+    fun sustains(program: Int): Boolean = program in SUSTAINING_PROGRAMS
+
+    // Full length (seconds) of a captured sample per [SoundFontExtractorMain] classification - how
+    // long a note can ring before it simply runs out of recorded audio. Shared with
+    // [io.github.jwyoon1220.openMCMelody.playback.PlaybackManager], which uses these same numbers
+    // to decide whether a note's real MIDI duration already fits inside the sample (nothing to do)
+    // or needs an explicit stopSound cutoff (duration shorter than the sample) - the two must never
+    // drift apart, hence living here rather than being duplicated as a private constant in each.
+    const val MELODIC_SAMPLE_SECONDS = 1.8
+    const val PERCUSSION_SAMPLE_SECONDS = 1.2
+    const val SUSTAINED_SAMPLE_SECONDS = 5.5
+
     // Each melodic instrument is split into per-octave sample slots (see InstrumentSlot's class
     // doc) - a 12-semitone bucket only ever needs to pitch-shift by at most half an octave,
     // unlike one sample stretched across the whole playable range (e.g. 88 piano keys).

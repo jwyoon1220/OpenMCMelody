@@ -64,4 +64,17 @@ object SoundPackLoader {
 
         return SoundPackDefinition(folder.name, name, description, packFormat, slotFiles)
     }
+
+    /**
+     * Reads only pack.yml's `source-soundfont` field (the sf2/dls filename
+     * [io.github.jwyoon1220.openMCMelody.soundfont.SoundFontConverter] recorded when it
+     * auto-generated this pack), skipping the sound-file validation [load] does - used by
+     * `/midi soundpack rebuild` to find what to re-extract from. Returns null for hand-authored
+     * packs (no such field) or a folder with no pack.yml at all.
+     */
+    fun sourceSoundfont(folder: File): String? {
+        val yamlFile = File(folder, "pack.yml")
+        if (!yamlFile.isFile) return null
+        return YamlConfiguration.loadConfiguration(yamlFile).getString("source-soundfont")
+    }
 }

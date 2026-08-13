@@ -14,9 +14,15 @@ import javax.sound.sampled.AudioSystem
 
 private const val PERCUSSION_CHANNEL = 9
 private const val MELODIC_HOLD_SECONDS = 0.9
-private const val MELODIC_TOTAL_SECONDS = 1.8
 private const val PERCUSSION_HOLD_SECONDS = 0.15
-private const val PERCUSSION_TOTAL_SECONDS = 1.2
+
+// Longer capture for GmNames.SUSTAINING_PROGRAMS (organ/strings/brass/reed/pipe/synth
+// lead+pad/etc.) so a long-held MIDI note doesn't outlast the recorded sample - unlike
+// MELODIC_HOLD_SECONDS/GmNames.MELODIC_SAMPLE_SECONDS's near-1:1 hold:release ratio (tuned for
+// piano-like decay tails), these instruments barely ring on after note-off, so most of the extra
+// length goes to hold. The *total* lengths (GmNames.MELODIC/PERCUSSION/SUSTAINED_SAMPLE_SECONDS)
+// live in GmNames since PlaybackManager needs the exact same numbers too.
+private const val SUSTAINED_HOLD_SECONDS = 5.0
 
 /**
  * Standalone entry point (deliberately has NO Bukkit/Paper dependency) that renders every General
@@ -65,8 +71,14 @@ object SoundFontExtractorMain {
         val manifest = StringBuilder()
         var rendered = 0
         var failed = 0
+        var processed = 0
+        val totalSlots = availablePrograms.size * GmNames.OCTAVE_COUNT + GmNames.PERCUSSION.size
 
         fun renderSlot(slot: String, percussion: Boolean, program: Int, note: Int) {
+            processed++
+            // Consumed by SoundFontConverter to drive an in-game progress bar - format is
+            // load-bearing (tab-separated, parsed by prefix), not just a log line.
+            println("PROGRESS\t$processed\t$totalSlots\t$slot")
             try {
                 renderOne(handle.synth, handle.stream, format, outputDir, slot, percussion, program, note)
                 manifest.append(slot).append('\t').append("$slot.wav").append('\n')
@@ -138,8 +150,16 @@ object SoundFontExtractorMain {
         val channel: MidiChannel = synth.channels[if (percussion) PERCUSSION_CHANNEL else 0]
         if (!percussion) channel.programChange(program)
 
-        val holdSeconds = if (percussion) PERCUSSION_HOLD_SECONDS else MELODIC_HOLD_SECONDS
-        val totalSeconds = if (percussion) PERCUSSION_TOTAL_SECONDS else MELODIC_TOTAL_SECONDS
+        val holdSeconds = when {
+            percussion -> PERCUSSION_HOLD_SECONDS
+            GmNames.sustains(program) -> SUSTAINED_HOLD_SECONDS
+            else -> MELODIC_HOLD_SECONDS
+        }
+        val totalSeconds = when {
+            percussion -> GmNames.PERCUSSION_SAMPLE_SECONDS
+            GmNames.sustains(program) -> GmNames.SUSTAINED_SAMPLE_SECONDS
+            else -> GmNames.MELODIC_SAMPLE_SECONDS
+        }
         val totalBytes = (format.frameSize * format.sampleRate * totalSeconds).toLong()
         val holdBytes = (format.frameSize * format.sampleRate * holdSeconds).toLong()
 

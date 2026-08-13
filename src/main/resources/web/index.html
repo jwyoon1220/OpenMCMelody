@@ -1,190 +1,305 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="light">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>OpenMCMelody</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
+<script>
+  tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        colors: {
+          "error": "#ba1a1a",
+          "tertiary-container": "#008673",
+          "surface-bright": "#f8f9fa",
+          "on-primary-fixed-variant": "#004493",
+          "tertiary": "#006a5b",
+          "surface-container-lowest": "#ffffff",
+          "secondary-container": "#7c4dff",
+          "on-background": "#191c1d",
+          "surface-container-high": "#e7e8e9",
+          "on-secondary-container": "#fcf6ff",
+          "on-secondary-fixed-variant": "#4f00d0",
+          "primary-container": "#1a73e8",
+          "secondary-fixed-dim": "#cdbdff",
+          "secondary": "#632ce5",
+          "inverse-surface": "#2e3132",
+          "tertiary-fixed": "#68fadd",
+          "on-tertiary": "#ffffff",
+          "outline-variant": "#c1c6d6",
+          "inverse-primary": "#adc7ff",
+          "on-secondary-fixed": "#20005f",
+          "on-tertiary-fixed": "#00201a",
+          "on-error-container": "#93000a",
+          "tertiary-fixed-dim": "#44ddc1",
+          "on-surface": "#191c1d",
+          "on-tertiary-fixed-variant": "#005145",
+          "surface-tint": "#005bc0",
+          "secondary-fixed": "#e8deff",
+          "background": "#f8f9fa",
+          "on-tertiary-container": "#ffffff",
+          "on-primary-fixed": "#001a41",
+          "surface-container": "#edeeef",
+          "on-error": "#ffffff",
+          "on-primary-container": "#ffffff",
+          "surface": "#f8f9fa",
+          "surface-container-low": "#f3f4f5",
+          "on-surface-variant": "#414754",
+          "surface-dim": "#d9dadb",
+          "on-primary": "#ffffff",
+          "surface-variant": "#e1e3e4",
+          "surface-container-highest": "#e1e3e4",
+          "error-container": "#ffdad6",
+          "primary": "#005bbf",
+          "outline": "#727785",
+          "primary-fixed-dim": "#adc7ff",
+          "inverse-on-surface": "#f0f1f2",
+          "primary-fixed": "#d8e2ff",
+          "on-secondary": "#ffffff"
+        },
+        borderRadius: { DEFAULT: "0.25rem", lg: "0.5rem", xl: "0.75rem", full: "9999px" },
+        spacing: {
+          "gutter": "20px", "sm": "8px", "md": "16px",
+          "margin-mobile": "16px", "margin-desktop": "32px",
+          "xl": "32px", "lg": "24px", "unit": "4px", "xs": "4px"
+        },
+        fontFamily: {
+          "headline-md": ["Plus Jakarta Sans"], "headline-lg": ["Plus Jakarta Sans"],
+          "display-lg": ["Plus Jakarta Sans"], "label-md": ["Inter"],
+          "body-md": ["Inter"], "body-lg": ["Inter"], "headline-sm": ["Plus Jakarta Sans"],
+          "body-sm": ["Inter"], "headline-lg-mobile": ["Plus Jakarta Sans"]
+        },
+        fontSize: {
+          "headline-md": ["24px", { lineHeight: "32px", fontWeight: "600" }],
+          "headline-lg": ["32px", { lineHeight: "40px", letterSpacing: "-0.01em", fontWeight: "600" }],
+          "display-lg": ["56px", { lineHeight: "64px", letterSpacing: "-0.02em", fontWeight: "700" }],
+          "label-md": ["12px", { lineHeight: "16px", letterSpacing: "0.05em", fontWeight: "600" }],
+          "body-md": ["16px", { lineHeight: "24px", fontWeight: "400" }],
+          "body-lg": ["18px", { lineHeight: "28px", fontWeight: "400" }],
+          "headline-sm": ["20px", { lineHeight: "28px", fontWeight: "600" }],
+          "body-sm": ["14px", { lineHeight: "20px", fontWeight: "400" }],
+          "headline-lg-mobile": ["28px", { lineHeight: "36px", fontWeight: "600" }]
+        }
+      }
+    }
+  };
+</script>
 <style>
-  :root {
-    color-scheme: dark;
-    --bg: #14161c;
-    --panel: #1c1f27;
-    --panel-2: #242835;
-    --border: #333846;
-    --text: #e7e9ee;
-    --muted: #9aa0ae;
-    --accent: #6ea8fe;
-    --accent-2: #4c7fd4;
-    --ok: #5fd68a;
-    --warn: #f2c14e;
-    --danger: #f27272;
-  }
-  * { box-sizing: border-box; }
-  body {
-    margin: 0;
-    font-family: -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
-    background: var(--bg);
-    color: var(--text);
-  }
-  header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 14px 20px;
-    border-bottom: 1px solid var(--border);
-    background: var(--panel);
-  }
-  header h1 { font-size: 18px; margin: 0; }
-  header .who { font-size: 13px; color: var(--muted); display: flex; gap: 10px; align-items: center; }
-  .badge {
-    font-size: 11px;
-    padding: 2px 8px;
-    border-radius: 999px;
-    background: var(--accent-2);
-    color: #fff;
-  }
-  main { max-width: 1100px; margin: 0 auto; padding: 20px; display: none; }
-  main.visible { display: block; }
-  #login-screen {
-    max-width: 380px;
-    margin: 60px auto;
-    padding: 24px;
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-  }
-  #login-screen h2 { margin-top: 0; font-size: 17px; }
-  #login-screen p { color: var(--muted); font-size: 13px; line-height: 1.5; }
-  input, select, button {
-    font: inherit;
-    color: var(--text);
-    background: var(--panel-2);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 7px 10px;
-  }
-  input, select { width: 100%; margin-bottom: 10px; }
-  button {
-    cursor: pointer;
-    background: var(--accent-2);
-    border-color: var(--accent-2);
-    color: #fff;
-    transition: background 0.15s;
-  }
-  button:hover { background: var(--accent); }
-  button:disabled { opacity: 0.4; cursor: not-allowed; }
-  button.secondary { background: var(--panel-2); border-color: var(--border); color: var(--text); }
-  button.secondary:hover { background: #2c3140; }
-  button.danger { background: #5a2a2a; border-color: #7a3838; }
-  button.danger:hover { background: #7a3838; }
-  .code-box {
-    font-size: 30px;
-    letter-spacing: 6px;
-    text-align: center;
-    padding: 14px;
-    margin: 14px 0;
-    background: var(--panel-2);
-    border: 1px dashed var(--accent);
-    border-radius: 8px;
-    color: var(--accent);
-  }
-  .status-line { font-size: 13px; color: var(--muted); min-height: 18px; }
-  .grid { display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 16px; align-items: start; }
-  @media (max-width: 800px) { .grid { grid-template-columns: 1fr; } }
-  .panel {
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 16px;
-    margin-bottom: 16px;
-  }
-  .panel h2 { font-size: 15px; margin: 0 0 12px; color: var(--text); }
-  .row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 10px 0;
-    border-bottom: 1px solid var(--border);
-    flex-wrap: wrap;
-  }
-  .row:last-child { border-bottom: none; }
-  .row .name { font-weight: 600; min-width: 90px; }
-  .row .meta { font-size: 12px; color: var(--muted); flex: 1 1 180px; }
-  .row .controls { display: flex; gap: 6px; flex-wrap: wrap; }
-  .empty { color: var(--muted); font-size: 13px; padding: 6px 0; }
-  .progress {
-    height: 4px;
-    background: var(--panel-2);
-    border-radius: 2px;
-    overflow: hidden;
-    margin-top: 4px;
-  }
-  .progress > div { height: 100%; background: var(--ok); }
-  .playlist-block { border: 1px solid var(--border); border-radius: 8px; padding: 10px; margin-bottom: 10px; }
-  .playlist-block .head { display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
-  .playlist-block .songs { margin-top: 8px; font-size: 13px; }
-  .playlist-block .songs .srow { display: flex; justify-content: space-between; padding: 3px 0; color: var(--muted); }
-  .inline-form { display: flex; gap: 6px; margin-top: 8px; }
-  .inline-form select, .inline-form input { margin-bottom: 0; }
-  .error-text { color: var(--danger); font-size: 13px; margin-top: 6px; }
+  body { font-family: 'Inter', sans-serif; }
+  h1, h2, h3, h4, h5, h6 { font-family: 'Plus Jakarta Sans', sans-serif; }
+  .hero-gradient { background: linear-gradient(135deg, #e8deff 0%, #d8e2ff 100%); }
+  .card-inner-glow { box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8); }
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #e1e3e4; border-radius: 10px; }
+  ::-webkit-scrollbar-thumb:hover { background: #c1c6d6; }
+  .btn-pill { display: inline-flex; align-items: center; gap: 6px; }
+  .btn-pill:disabled { opacity: 0.4; cursor: not-allowed; }
 </style>
 </head>
-<body>
+<body class="bg-background text-on-background">
 
-<header>
-  <h1>🎵 OpenMCMelody</h1>
-  <div class="who" id="who-box" style="display:none;">
-    <span id="who-name"></span>
-    <span class="badge" id="who-admin" style="display:none;">ADMIN</span>
-    <button class="secondary" id="logout-btn">Log out</button>
-  </div>
-</header>
+<!-- Login screen -->
+<div id="login-screen" class="min-h-screen flex items-center justify-center p-6">
+  <div class="w-full max-w-md bg-surface-container-lowest border border-outline-variant/50 rounded-2xl shadow-lg p-8">
+    <div class="flex items-center gap-3 mb-6">
+      <div class="w-11 h-11 rounded-lg bg-primary flex items-center justify-center text-on-primary shadow-sm shrink-0">
+        <span class="material-symbols-outlined">graphic_eq</span>
+      </div>
+      <div>
+        <h1 class="font-headline-sm text-headline-sm font-bold text-on-surface">OpenMCMelody</h1>
+        <p class="font-label-md text-label-md text-on-surface-variant">Web control panel</p>
+      </div>
+    </div>
+    <h2 class="font-headline-sm text-headline-sm text-on-surface mb-2">Log in with your Minecraft account</h2>
+    <p class="font-body-sm text-body-sm text-on-surface-variant mb-6 leading-relaxed">Enter your in-game username, then run the code shown here in Minecraft chat as <code class="px-1.5 py-0.5 rounded bg-surface-container text-on-surface font-mono text-[13px]">/midi verify &lt;code&gt;</code>. Only the real player with that name can complete the login.</p>
 
-<div id="login-screen">
-  <h2>Log in with your Minecraft account</h2>
-  <p>Enter your in-game username, then type the code shown here into Minecraft chat as <code>/midi verify &lt;code&gt;</code>. Only the real player with that name can complete the login.</p>
-  <div id="login-form">
-    <input id="username-input" placeholder="Minecraft username" maxlength="16" autocomplete="off">
-    <button id="start-login-btn">Get code</button>
+    <div id="login-form" class="space-y-3">
+      <input id="username-input" placeholder="Minecraft username" maxlength="16" autocomplete="off"
+        class="w-full h-11 px-4 rounded-full bg-surface-container-highest border border-outline-variant/50 text-body-sm font-body-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary placeholder:text-on-surface-variant">
+      <button id="start-login-btn" class="w-full h-11 rounded-full bg-primary text-on-primary font-label-md text-label-md font-bold hover:opacity-90 transition-opacity">Get code</button>
+    </div>
+
+    <div id="code-area" class="hidden space-y-3">
+      <div id="code-text" class="text-center py-4 rounded-xl bg-surface-container-highest border-2 border-dashed border-primary text-primary font-headline-lg text-headline-lg tracking-[0.3em]"></div>
+      <p class="font-body-sm text-body-sm text-on-surface-variant text-center">Run <code class="px-1.5 py-0.5 rounded bg-surface-container text-on-surface font-mono text-[13px]">/midi verify <span id="code-inline"></span></code> in-game. This page updates automatically.</p>
+      <div id="login-status" class="text-center font-label-md text-label-md text-on-surface-variant">Waiting for verification...</div>
+    </div>
+
+    <div id="login-error" class="text-error font-body-sm text-body-sm mt-4"></div>
   </div>
-  <div id="code-area" style="display:none;">
-    <div class="code-box" id="code-text"></div>
-    <p>Run <code>/midi verify <span id="code-inline"></span></code> in-game. This page updates automatically.</p>
-    <div class="status-line" id="login-status">Waiting for verification...</div>
-  </div>
-  <div class="error-text" id="login-error"></div>
 </div>
 
-<main id="dashboard">
-  <div class="grid">
-    <div>
-      <div class="panel">
-        <h2>Online players</h2>
-        <div id="players-list"><div class="empty">Loading...</div></div>
+<!-- App shell -->
+<div id="app-shell" class="hidden flex-col md:flex-row min-h-screen overflow-hidden">
+
+  <!-- Mobile top bar -->
+  <header class="flex items-center justify-between px-margin-mobile h-16 w-full fixed top-0 z-50 bg-surface md:hidden shadow-sm border-b border-outline-variant/50">
+    <div class="flex items-center gap-2">
+      <span class="material-symbols-outlined text-primary text-2xl">graphic_eq</span>
+      <span class="font-headline-sm text-headline-sm font-bold text-primary">OpenMCMelody</span>
+    </div>
+    <div class="flex items-center gap-3">
+      <span class="font-label-md text-label-md text-on-surface-variant truncate max-w-[100px]" id="who-name-mobile"></span>
+      <button id="logout-btn-mobile" class="w-9 h-9 rounded-full bg-surface-container flex items-center justify-center text-on-surface-variant hover:text-error transition-colors shrink-0">
+        <span class="material-symbols-outlined text-[20px]">logout</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Side nav (desktop) -->
+  <nav class="hidden md:flex fixed left-0 top-0 h-full flex-col pt-8 pb-6 z-40 bg-surface-container-low border-r border-outline-variant w-64">
+    <div class="px-6 mb-8 flex items-center gap-3">
+      <div class="w-10 h-10 rounded-lg bg-primary flex items-center justify-center text-on-primary shadow-sm shrink-0">
+        <span class="material-symbols-outlined">graphic_eq</span>
+      </div>
+      <div>
+        <h1 class="font-headline-sm text-headline-sm font-bold text-primary tracking-tight">OpenMCMelody</h1>
+        <p class="font-label-md text-label-md text-on-surface-variant opacity-80">Control panel</p>
       </div>
     </div>
-    <div>
-      <div class="panel">
-        <h2>Playlists</h2>
-        <div id="playlists-list"><div class="empty">Loading...</div></div>
-        <div class="inline-form">
-          <input id="new-playlist-name" placeholder="New playlist name">
-          <button id="create-playlist-btn">Create</button>
+    <div class="flex-1 overflow-y-auto px-4 space-y-1">
+      <a data-scroll="home" class="nav-link flex items-center gap-3 px-4 py-3 bg-secondary-container text-on-secondary-container rounded-full mx-2 font-bold transition-all shadow-sm cursor-pointer">
+        <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">home</span>
+        <span class="font-label-md text-label-md">Home</span>
+      </a>
+      <a data-scroll="players-section" class="nav-link flex items-center gap-3 px-4 py-3 text-on-surface-variant hover:bg-surface-container-high rounded-full mx-2 transition-all hover:text-on-surface cursor-pointer">
+        <span class="material-symbols-outlined">group</span>
+        <span class="font-label-md text-label-md">Players</span>
+      </a>
+      <a data-scroll="playlists-section" class="nav-link flex items-center gap-3 px-4 py-3 text-on-surface-variant hover:bg-surface-container-high rounded-full mx-2 transition-all hover:text-on-surface cursor-pointer">
+        <span class="material-symbols-outlined">queue_music</span>
+        <span class="font-label-md text-label-md">Playlists</span>
+      </a>
+      <a data-scroll="songs-section" class="nav-link flex items-center gap-3 px-4 py-3 text-on-surface-variant hover:bg-surface-container-high rounded-full mx-2 transition-all hover:text-on-surface cursor-pointer">
+        <span class="material-symbols-outlined">library_music</span>
+        <span class="font-label-md text-label-md">MIDI Files</span>
+      </a>
+    </div>
+    <div class="px-6 pt-4 space-y-3 border-t border-outline-variant/30">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-full bg-surface-container-highest flex items-center justify-center text-on-surface-variant shrink-0">
+          <span class="material-symbols-outlined text-[18px]">person</span>
+        </div>
+        <div class="flex-1 min-w-0">
+          <p class="font-body-sm text-body-sm font-bold text-on-surface truncate" id="who-name"></p>
+          <span class="font-label-md text-label-md text-secondary" id="who-admin" style="display:none;">ADMIN</span>
         </div>
       </div>
-      <div class="panel">
-        <h2>MIDI files</h2>
-        <div id="songs-list"><div class="empty">Loading...</div></div>
+      <button id="logout-btn" class="w-full py-2 rounded-full bg-surface-container-high text-on-surface font-label-md text-label-md font-bold hover:bg-surface-variant transition-colors">Log out</button>
+    </div>
+  </nav>
+
+  <!-- Main content -->
+  <main id="main-content" class="flex-1 overflow-y-auto bg-surface relative pb-32 md:pb-28 md:pl-64 pt-16 md:pt-0">
+    <div class="hidden md:flex items-center justify-between px-8 py-4 sticky top-0 z-30 bg-surface/80 backdrop-blur-md">
+      <div class="relative group">
+        <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant">search</span>
+        <input id="search-input" class="w-80 h-10 pl-10 pr-4 rounded-full bg-surface-container-highest border-none text-body-sm font-body-sm focus:ring-2 focus:ring-primary focus:bg-surface transition-all placeholder:text-on-surface-variant" placeholder="Search songs and playlists..." type="text">
       </div>
+      <span class="px-3 py-1.5 rounded-full bg-surface-container text-on-surface-variant font-label-md text-label-md flex items-center gap-1.5">
+        <span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span>
+        <span id="online-count">0</span> online
+      </span>
+    </div>
+
+    <div class="p-4 md:p-8 space-y-xl max-w-6xl mx-auto">
+
+      <!-- Mobile search -->
+      <div class="md:hidden relative">
+        <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant">search</span>
+        <input id="search-input-mobile" class="w-full h-11 pl-10 pr-4 rounded-full bg-surface-container-highest border-none text-body-sm font-body-sm focus:outline-none focus:ring-2 focus:ring-primary placeholder:text-on-surface-variant" placeholder="Search songs and playlists..." type="text">
+      </div>
+
+      <!-- Hero -->
+      <section id="home" class="relative rounded-2xl overflow-hidden shadow-sm card-inner-glow hero-gradient p-6 md:p-8">
+        <div class="absolute top-0 right-0 w-64 h-64 bg-white/30 rounded-full blur-3xl -mr-16 -mt-16"></div>
+        <div class="relative z-10">
+          <span class="inline-block px-3 py-1 bg-surface/40 backdrop-blur-md rounded-full font-label-md text-label-md font-bold mb-4 text-on-surface">CONTROL PANEL</span>
+          <h2 class="font-headline-lg-mobile md:font-headline-lg text-headline-lg-mobile md:text-headline-lg text-on-surface mb-2" id="hero-greeting">Welcome back</h2>
+          <p class="font-body-lg text-body-lg text-on-surface-variant max-w-lg mb-4">Play MIDI music to yourself or other players, straight from note blocks.</p>
+          <div class="flex flex-wrap gap-3">
+            <span class="px-4 py-2 bg-surface/60 backdrop-blur-md rounded-full font-label-md text-label-md font-bold text-on-surface flex items-center gap-2"><span class="material-symbols-outlined text-[18px]">group</span><span id="stat-players">0</span> online</span>
+            <span class="px-4 py-2 bg-surface/60 backdrop-blur-md rounded-full font-label-md text-label-md font-bold text-on-surface flex items-center gap-2"><span class="material-symbols-outlined text-[18px]">queue_music</span><span id="stat-playlists">0</span> playlists</span>
+            <span class="px-4 py-2 bg-surface/60 backdrop-blur-md rounded-full font-label-md text-label-md font-bold text-on-surface flex items-center gap-2"><span class="material-symbols-outlined text-[18px]">library_music</span><span id="stat-songs">0</span> songs</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Section-jump chips (also serves as mobile nav) -->
+      <div class="flex gap-2 overflow-x-auto pb-1">
+        <button data-scroll="players-section" class="px-4 py-1.5 rounded-full bg-surface-container-high text-on-surface hover:bg-surface-variant transition-colors font-label-md text-label-md whitespace-nowrap">Players</button>
+        <button data-scroll="playlists-section" class="px-4 py-1.5 rounded-full bg-surface-container-high text-on-surface hover:bg-surface-variant transition-colors font-label-md text-label-md whitespace-nowrap">Playlists</button>
+        <button data-scroll="songs-section" class="px-4 py-1.5 rounded-full bg-surface-container-high text-on-surface hover:bg-surface-variant transition-colors font-label-md text-label-md whitespace-nowrap">MIDI Files</button>
+      </div>
+
+      <!-- Online players -->
+      <section id="players-section">
+        <h3 class="font-headline-sm text-headline-sm text-on-surface mb-4 flex items-center gap-2"><span class="material-symbols-outlined text-primary">group</span>Online Players</h3>
+        <div id="players-list" class="grid grid-cols-1 lg:grid-cols-2 gap-4"><div class="text-on-surface-variant font-body-sm text-body-sm py-2">Loading...</div></div>
+      </section>
+
+      <!-- Playlists -->
+      <section id="playlists-section">
+        <h3 class="font-headline-sm text-headline-sm text-on-surface mb-4 flex items-center gap-2"><span class="material-symbols-outlined text-primary">queue_music</span>Playlists</h3>
+        <div class="flex gap-2 mb-4">
+          <input id="new-playlist-name" placeholder="New playlist name" class="flex-1 h-10 px-4 rounded-full bg-surface-container-highest border border-outline-variant/50 text-body-sm font-body-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary placeholder:text-on-surface-variant">
+          <button id="create-playlist-btn" class="btn-pill px-5 h-10 rounded-full bg-primary text-on-primary font-label-md text-label-md font-bold hover:opacity-90 transition-opacity shrink-0"><span class="material-symbols-outlined text-[18px]">add</span>Create</button>
+        </div>
+        <div id="playlists-list" class="grid grid-cols-1 md:grid-cols-2 gap-4"><div class="text-on-surface-variant font-body-sm text-body-sm py-2">Loading...</div></div>
+      </section>
+
+      <!-- MIDI files -->
+      <section id="songs-section">
+        <h3 class="font-headline-sm text-headline-sm text-on-surface mb-4 flex items-center gap-2"><span class="material-symbols-outlined text-primary">library_music</span>MIDI Files</h3>
+        <div id="songs-list" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"><div class="text-on-surface-variant font-body-sm text-body-sm py-2">Loading...</div></div>
+      </section>
+
+    </div>
+  </main>
+</div>
+
+<!-- Bottom player bar: reflects the logged-in player's own Minecraft playback -->
+<div id="player-bar" class="hidden fixed bottom-0 left-0 w-full h-20 md:h-24 bg-surface-container-highest/90 backdrop-blur-xl border-t border-outline-variant/30 items-center justify-between px-4 md:px-margin-desktop z-50 shadow-[0_-4px_24px_rgba(0,0,0,0.05)] gap-4">
+  <div class="flex items-center gap-3 md:gap-4 flex-1 min-w-0">
+    <div class="w-11 h-11 md:w-14 md:h-14 rounded-md bg-surface-variant flex items-center justify-center text-on-surface-variant shrink-0">
+      <span class="material-symbols-outlined">music_note</span>
+    </div>
+    <div class="flex flex-col min-w-0">
+      <span class="font-body-md text-body-md font-bold text-on-surface truncate" id="player-bar-title">Not listening to anything</span>
+      <span class="font-label-md text-label-md text-on-surface-variant truncate" id="player-bar-subtitle"></span>
     </div>
   </div>
-</main>
+  <div class="flex flex-col items-center justify-center flex-1 max-w-xl gap-1 md:gap-2">
+    <div class="flex items-center gap-4">
+      <button id="player-bar-toggle" class="hidden w-9 h-9 md:w-10 md:h-10 rounded-full bg-primary text-on-primary items-center justify-center hover:scale-105 active:scale-95 transition-transform shadow-md">
+        <span class="material-symbols-outlined text-[22px]" id="player-bar-toggle-icon" style="font-variation-settings: 'FILL' 1;">pause</span>
+      </button>
+      <button id="player-bar-stop" class="hidden w-9 h-9 rounded-full bg-surface-container text-error items-center justify-center hover:bg-error/10 transition-colors">
+        <span class="material-symbols-outlined text-[20px]">stop</span>
+      </button>
+    </div>
+    <div class="hidden md:flex items-center gap-3 w-full">
+      <span class="font-label-md text-label-md text-on-surface-variant w-9 text-right" id="player-bar-elapsed">0:00</span>
+      <div class="flex-1 h-1.5 bg-outline-variant/30 rounded-full overflow-hidden">
+        <div class="h-full bg-primary rounded-full transition-[width]" id="player-bar-progress-fill" style="width:0%"></div>
+      </div>
+      <span class="font-label-md text-label-md text-on-surface-variant w-9" id="player-bar-total">0:00</span>
+    </div>
+  </div>
+  <div class="flex-1 hidden md:block"></div>
+</div>
 
 <script>
 const $ = (id) => document.getElementById(id);
 let me = null; // { playerName, uuid, isAdmin }
 let songs = [];
 let playlists = [];
+let searchQuery = '';
 let loginPollTimer = null;
 let dashPollTimer = null;
 
@@ -209,8 +324,8 @@ $('start-login-btn').addEventListener('click', async () => {
     const res = await post('/api/login/start', { username });
     $('code-text').textContent = res.code;
     $('code-inline').textContent = res.code;
-    $('login-form').style.display = 'none';
-    $('code-area').style.display = 'block';
+    $('login-form').classList.add('hidden');
+    $('code-area').classList.remove('hidden');
     pollLoginStatus();
   } catch (e) {
     $('login-error').textContent = e.message;
@@ -236,10 +351,34 @@ function pollLoginStatus() {
   tick();
 }
 
-$('logout-btn').addEventListener('click', async () => {
+async function doLogout() {
   try { await post('/api/logout'); } catch (e) {}
   location.reload();
+}
+$('logout-btn').addEventListener('click', doLogout);
+$('logout-btn-mobile').addEventListener('click', doLogout);
+
+// ---- section-jump nav ----
+
+document.querySelectorAll('[data-scroll]').forEach((el) => {
+  el.addEventListener('click', () => {
+    const target = el.dataset.scroll === 'home' ? $('home') : $(el.dataset.scroll);
+    if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
 });
+
+// ---- search ----
+
+function onSearchInput(ev) {
+  searchQuery = ev.target.value.trim().toLowerCase();
+  const other = ev.target === $('search-input') ? $('search-input-mobile') : $('search-input');
+  if (other) other.value = ev.target.value;
+  renderSongs();
+  renderPlaylists();
+}
+$('search-input').addEventListener('input', onSearchInput);
+$('search-input-mobile').addEventListener('input', onSearchInput);
+function matchesSearch(name) { return !searchQuery || name.toLowerCase().includes(searchQuery); }
 
 // ---- dashboard ----
 
@@ -247,27 +386,37 @@ async function boot() {
   try {
     me = await get('/api/me');
   } catch (e) {
-    $('login-screen').style.display = 'block';
     return;
   }
-  $('login-screen').style.display = 'none';
-  $('who-box').style.display = 'flex';
+  $('login-screen').classList.add('hidden');
+  $('app-shell').classList.remove('hidden');
+  $('app-shell').classList.add('flex');
+  $('player-bar').classList.remove('hidden');
+  $('player-bar').classList.add('flex');
   $('who-name').textContent = me.playerName;
+  $('who-name-mobile').textContent = me.playerName;
   $('who-admin').style.display = me.isAdmin ? 'inline-block' : 'none';
-  $('dashboard').classList.add('visible');
+  $('hero-greeting').textContent = 'Welcome back, ' + me.playerName;
   await refreshAll();
   dashPollTimer = setInterval(refreshAll, 2000);
 }
 
 async function refreshAll() {
   try {
-    const [playersRes, songsRes, playlistsRes] = await Promise.all([get('/api/players'), get('/api/songs'), get('/api/playlists')]);
+    const [playersRes, songsRes, playlistsRes, myStatus] = await Promise.all([
+      get('/api/players'), get('/api/songs'), get('/api/playlists'), get('/api/status?target=self'),
+    ]);
     songs = songsRes;
     playlists = playlistsRes;
     const statuses = await Promise.all(playersRes.map((p) => get('/api/status?target=' + p.uuid).catch(() => ({ playing: false }))));
     renderPlayers(playersRes, statuses);
     renderSongs();
     renderPlaylists();
+    renderPlayerBar(myStatus);
+    $('online-count').textContent = playersRes.length;
+    $('stat-players').textContent = playersRes.length;
+    $('stat-playlists').textContent = playlists.length;
+    $('stat-songs').textContent = songs.length;
   } catch (e) { /* transient - next poll will retry */ }
 }
 
@@ -286,34 +435,45 @@ function songOptions() {
 }
 function esc(s) { return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 
+const BTN = 'btn-pill px-3 py-1.5 rounded-full bg-surface-container-high text-on-surface font-label-md text-label-md font-bold hover:bg-surface-variant transition-colors';
+const BTN_DANGER = 'btn-pill px-3 py-1.5 rounded-full bg-error-container text-on-error-container font-label-md text-label-md font-bold hover:opacity-90 transition-opacity';
+const SELECT = 'h-9 px-3 rounded-full bg-surface-container-highest border border-outline-variant/50 text-body-sm font-body-sm text-on-surface flex-1 min-w-[140px]';
+
 function renderPlayers(players, statuses) {
   const box = $('players-list');
-  if (players.length === 0) { box.innerHTML = '<div class="empty">No players online.</div>'; return; }
+  if (players.length === 0) { box.innerHTML = '<div class="text-on-surface-variant font-body-sm text-body-sm py-2">No players online.</div>'; return; }
   box.innerHTML = players.map((p, i) => {
     const st = statuses[i] || { playing: false };
     const control = canControl(p.uuid);
-    let meta;
+    let metaHtml;
     if (st.playing) {
       const pct = st.totalTicks > 0 ? Math.min(100, Math.round((st.elapsedTicks / st.totalTicks) * 100)) : 0;
       const label = st.mode === 'PLAYLIST' ? ('playlist "' + esc(st.playlistName) + '" (' + st.playlistIndex + '/' + st.playlistSize + ') - ' + esc(st.song)) : esc(st.song);
       const stateSuffix = st.state === 'PAUSED' ? ' (paused)' : st.state === 'LOADING' ? ' (loading)' : '';
-      meta = label + stateSuffix + ' - ' + fmtTime(st.elapsedTicks) + '/' + fmtTime(st.totalTicks) + '<div class="progress"><div style="width:' + pct + '%"></div></div>';
+      metaHtml = '<p class="font-body-sm text-body-sm text-on-surface-variant truncate">' + label + stateSuffix + ' - ' + fmtTime(st.elapsedTicks) + '/' + fmtTime(st.totalTicks) + '</p>' +
+        '<div class="h-1.5 bg-outline-variant/30 rounded-full overflow-hidden mt-1.5"><div class="h-full bg-primary rounded-full" style="width:' + pct + '%"></div></div>';
     } else {
-      meta = 'Not listening to anything.';
+      metaHtml = '<p class="font-body-sm text-body-sm text-on-surface-variant truncate">Not listening to anything.</p>';
     }
     const pauseResumeBtn = st.playing
-      ? '<button class="secondary" data-act="' + (st.state === 'PAUSED' ? 'resume' : 'pause') + '" data-uuid="' + p.uuid + '" ' + (control ? '' : 'disabled') + '>' + (st.state === 'PAUSED' ? 'Resume' : 'Pause') + '</button>'
+      ? '<button class="' + BTN + '" data-act="' + (st.state === 'PAUSED' ? 'resume' : 'pause') + '" data-uuid="' + p.uuid + '" ' + (control ? '' : 'disabled') + '><span class="material-symbols-outlined text-[16px]">' + (st.state === 'PAUSED' ? 'play_arrow' : 'pause') + '</span>' + (st.state === 'PAUSED' ? 'Resume' : 'Pause') + '</button>'
       : '';
-    const stopBtn = me.isAdmin ? '<button class="danger" data-act="stop" data-uuid="' + p.uuid + '">Stop</button>' : '';
+    const stopBtn = me.isAdmin ? '<button class="' + BTN_DANGER + '" data-act="stop" data-uuid="' + p.uuid + '"><span class="material-symbols-outlined text-[16px]">stop</span>Stop</button>' : '';
     const playSongForm = me.isAdmin
-      ? '<select data-song-target="' + p.uuid + '">' + songOptions() + '</select><button data-act="playsong" data-uuid="' + p.uuid + '">Play song</button>'
+      ? '<div class="flex gap-2 mt-2"><select class="' + SELECT + '" data-song-target="' + p.uuid + '">' + songOptions() + '</select><button class="' + BTN + ' shrink-0" data-act="playsong" data-uuid="' + p.uuid + '"><span class="material-symbols-outlined text-[16px]">play_arrow</span>Play</button></div>'
       : '';
     const playPlaylistForm = playlists.length > 0
-      ? '<select data-playlist-target="' + p.uuid + '">' + playlistOptions() + '</select><button data-act="playplaylist" data-uuid="' + p.uuid + '">Play playlist</button>'
+      ? '<div class="flex gap-2 mt-2"><select class="' + SELECT + '" data-playlist-target="' + p.uuid + '">' + playlistOptions() + '</select><button class="' + BTN + ' shrink-0" data-act="playplaylist" data-uuid="' + p.uuid + '"><span class="material-symbols-outlined text-[16px]">queue_music</span>Play</button></div>'
       : '';
-    return '<div class="row"><span class="name">' + esc(p.name) + '</span><span class="meta">' + meta + '</span>' +
-      '<div class="controls">' + pauseResumeBtn + stopBtn + '</div></div>' +
-      '<div class="row" style="padding-top:0;"><div class="controls">' + playSongForm + playPlaylistForm + '</div></div>';
+    return '<div class="bg-surface-container-lowest border border-outline-variant/50 rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow">' +
+      '<div class="flex items-center gap-3 mb-1">' +
+        '<div class="w-10 h-10 rounded-full bg-primary-container flex items-center justify-center text-on-primary-container shrink-0"><span class="material-symbols-outlined text-[20px]">person</span></div>' +
+        '<div class="flex-1 min-w-0"><p class="font-body-md text-body-md font-bold text-on-surface truncate">' + esc(p.name) + '</p></div>' +
+      '</div>' +
+      '<div class="pl-[52px]">' + metaHtml + '</div>' +
+      '<div class="flex flex-wrap gap-2 mt-3 pl-[52px]">' + pauseResumeBtn + stopBtn + '</div>' +
+      '<div class="pl-[52px]">' + playSongForm + playPlaylistForm + '</div>' +
+    '</div>';
   }).join('');
 
   box.querySelectorAll('button[data-act]').forEach((btn) => btn.addEventListener('click', onPlayerAction));
@@ -345,10 +505,16 @@ async function onPlayerAction(ev) {
 
 function renderSongs() {
   const box = $('songs-list');
-  if (songs.length === 0) { box.innerHTML = '<div class="empty">No .mid files in the midi/ folder.</div>'; return; }
-  box.innerHTML = songs.map((s) => {
-    const playBtn = me.isAdmin ? '<button class="secondary" data-act="playsong" data-filename="' + esc(s) + '">Play to me</button>' : '';
-    return '<div class="row"><span class="meta">' + esc(s) + '</span><div class="controls">' + playBtn + '</div></div>';
+  if (songs.length === 0) { box.innerHTML = '<div class="text-on-surface-variant font-body-sm text-body-sm py-2">No .mid files in the midi/ folder.</div>'; return; }
+  const filtered = songs.filter(matchesSearch);
+  if (filtered.length === 0) { box.innerHTML = '<div class="text-on-surface-variant font-body-sm text-body-sm py-2">No songs match your search.</div>'; return; }
+  box.innerHTML = filtered.map((s) => {
+    const playBtn = me.isAdmin ? '<button class="' + BTN + ' shrink-0" data-act="playsong" data-filename="' + esc(s) + '"><span class="material-symbols-outlined text-[16px]">play_arrow</span>Play to me</button>' : '';
+    return '<div class="flex items-center gap-3 bg-surface-container-lowest border border-outline-variant/50 rounded-lg p-3 hover:bg-surface-container-low transition-colors shadow-sm">' +
+      '<div class="w-10 h-10 rounded-md bg-surface-variant flex items-center justify-center text-on-surface-variant shrink-0"><span class="material-symbols-outlined text-[20px]">music_note</span></div>' +
+      '<div class="flex-1 min-w-0"><p class="font-body-sm text-body-sm font-bold text-on-surface truncate">' + esc(s) + '</p></div>' +
+      playBtn +
+    '</div>';
   }).join('');
   box.querySelectorAll('button[data-act="playsong"]').forEach((btn) => btn.addEventListener('click', onSongAction));
 }
@@ -369,31 +535,36 @@ async function onSongAction(ev) {
 
 function renderPlaylists() {
   const box = $('playlists-list');
-  if (playlists.length === 0) { box.innerHTML = '<div class="empty">No playlists yet.</div>'; return; }
-  box.innerHTML = playlists.map((p) => {
-    return '<div class="playlist-block" data-name="' + esc(p.name) + '">' +
-      '<div class="head"><strong>' + esc(p.name) + '</strong><span class="meta">' + p.songCount + ' song(s)</span></div>' +
-      '<div class="controls" style="margin-top:8px;">' +
-        '<button class="secondary" data-act="playtoself" data-name="' + esc(p.name) + '">Play to me</button>' +
-        '<button class="danger" data-act="deleteplaylist" data-name="' + esc(p.name) + '">Delete</button>' +
+  if (playlists.length === 0) { box.innerHTML = '<div class="text-on-surface-variant font-body-sm text-body-sm py-2">No playlists yet.</div>'; return; }
+  const filtered = playlists.filter((p) => matchesSearch(p.name));
+  if (filtered.length === 0) { box.innerHTML = '<div class="text-on-surface-variant font-body-sm text-body-sm py-2">No playlists match your search.</div>'; return; }
+  box.innerHTML = filtered.map((p) => {
+    return '<div class="bg-surface-container-lowest border border-outline-variant/50 rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow" data-name="' + esc(p.name) + '">' +
+      '<div class="flex items-center gap-3 mb-1">' +
+        '<div class="w-10 h-10 rounded-lg bg-secondary-container flex items-center justify-center text-on-secondary-container shrink-0"><span class="material-symbols-outlined text-[20px]">queue_music</span></div>' +
+        '<div class="flex-1 min-w-0"><p class="font-body-md text-body-md font-bold text-on-surface truncate">' + esc(p.name) + '</p><p class="font-label-md text-label-md text-on-surface-variant">' + p.songCount + ' song(s)</p></div>' +
       '</div>' +
-      '<div class="songs" id="pl-songs-' + esc(p.name) + '"></div>' +
-      '<div class="inline-form">' +
-        '<select data-add-song="' + esc(p.name) + '">' + songOptions() + '</select>' +
-        '<button data-act="addsong" data-name="' + esc(p.name) + '">Add</button>' +
+      '<div class="flex flex-wrap gap-2 mt-3">' +
+        '<button class="' + BTN + '" data-act="playtoself" data-name="' + esc(p.name) + '"><span class="material-symbols-outlined text-[16px]">play_arrow</span>Play to me</button>' +
+        '<button class="' + BTN_DANGER + '" data-act="deleteplaylist" data-name="' + esc(p.name) + '"><span class="material-symbols-outlined text-[16px]">delete</span>Delete</button>' +
+      '</div>' +
+      '<div class="mt-3 space-y-1 font-body-sm text-body-sm" id="pl-songs-' + esc(p.name) + '"></div>' +
+      '<div class="flex gap-2 mt-3">' +
+        '<select class="' + SELECT + '" data-add-song="' + esc(p.name) + '">' + songOptions() + '</select>' +
+        '<button class="' + BTN + '" data-act="addsong" data-name="' + esc(p.name) + '"><span class="material-symbols-outlined text-[16px]">add</span>Add</button>' +
       '</div>' +
     '</div>';
   }).join('');
 
   box.querySelectorAll('button[data-act]').forEach((btn) => btn.addEventListener('click', onPlaylistAction));
 
-  playlists.forEach(async (p) => {
+  filtered.forEach(async (p) => {
     try {
       const detail = await get('/api/playlists/' + encodeURIComponent(p.name));
       const el = $('pl-songs-' + p.name);
       if (!el) return;
-      el.innerHTML = detail.songs.length === 0 ? '<div class="empty">Empty.</div>' : detail.songs.map((s, i) =>
-        '<div class="srow"><span>' + (i + 1) + '. ' + esc(s) + '</span><button class="secondary" data-act="removesong" data-name="' + esc(p.name) + '" data-entry="' + (i + 1) + '">Remove</button></div>'
+      el.innerHTML = detail.songs.length === 0 ? '<div class="text-on-surface-variant py-1">Empty.</div>' : detail.songs.map((s, i) =>
+        '<div class="flex items-center justify-between gap-2 py-1"><span class="text-on-surface truncate">' + (i + 1) + '. ' + esc(s) + '</span><button class="text-on-surface-variant hover:text-error font-label-md text-label-md font-bold shrink-0" data-act="removesong" data-name="' + esc(p.name) + '" data-entry="' + (i + 1) + '">Remove</button></div>'
       ).join('');
       el.querySelectorAll('button[data-act="removesong"]').forEach((btn) => btn.addEventListener('click', onPlaylistAction));
     } catch (e) {}
@@ -431,6 +602,65 @@ $('create-playlist-btn').addEventListener('click', async () => {
     await refreshAll();
   } catch (e) {
     alert(e.message);
+  }
+});
+
+// ---- bottom player bar (self playback) ----
+
+function renderPlayerBar(status) {
+  const toggleBtn = $('player-bar-toggle');
+  const stopBtn = $('player-bar-stop');
+  if (!status.playing) {
+    $('player-bar-title').textContent = 'Not listening to anything';
+    $('player-bar-subtitle').textContent = '';
+    $('player-bar-elapsed').textContent = '0:00';
+    $('player-bar-total').textContent = '0:00';
+    $('player-bar-progress-fill').style.width = '0%';
+    toggleBtn.classList.add('hidden'); toggleBtn.classList.remove('flex');
+    stopBtn.classList.add('hidden'); stopBtn.classList.remove('flex');
+    return;
+  }
+  const label = status.mode === 'PLAYLIST' ? ('Playlist "' + status.playlistName + '" (' + status.playlistIndex + '/' + status.playlistSize + ')') : 'Single song';
+  const stateSuffix = status.state === 'PAUSED' ? ' • Paused' : status.state === 'LOADING' ? ' • Loading...' : '';
+  $('player-bar-title').textContent = status.song || 'Loading...';
+  $('player-bar-subtitle').textContent = label + stateSuffix;
+  $('player-bar-elapsed').textContent = fmtTime(status.elapsedTicks || 0);
+  $('player-bar-total').textContent = fmtTime(status.totalTicks || 0);
+  const pct = status.totalTicks > 0 ? Math.min(100, Math.round((status.elapsedTicks / status.totalTicks) * 100)) : 0;
+  $('player-bar-progress-fill').style.width = pct + '%';
+
+  toggleBtn.classList.remove('hidden'); toggleBtn.classList.add('flex');
+  toggleBtn.dataset.act = status.state === 'PAUSED' ? 'resume' : 'pause';
+  $('player-bar-toggle-icon').textContent = status.state === 'PAUSED' ? 'play_arrow' : 'pause';
+
+  if (me.isAdmin) { stopBtn.classList.remove('hidden'); stopBtn.classList.add('flex'); }
+  else { stopBtn.classList.add('hidden'); stopBtn.classList.remove('flex'); }
+}
+
+$('player-bar-toggle').addEventListener('click', async (ev) => {
+  const btn = ev.currentTarget;
+  const act = btn.dataset.act;
+  btn.disabled = true;
+  try {
+    await post(act === 'resume' ? '/api/resume' : '/api/pause', { targets: ['self'] });
+    await refreshAll();
+  } catch (e) {
+    alert(e.message);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+$('player-bar-stop').addEventListener('click', async (ev) => {
+  const btn = ev.currentTarget;
+  btn.disabled = true;
+  try {
+    await post('/api/stop', { targets: ['self'] });
+    await refreshAll();
+  } catch (e) {
+    alert(e.message);
+  } finally {
+    btn.disabled = false;
   }
 });
 

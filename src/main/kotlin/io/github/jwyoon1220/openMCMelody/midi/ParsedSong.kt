@@ -15,6 +15,11 @@ package io.github.jwyoon1220.openMCMelody.midi
  * [tick] is quantized (and, where notes collide, nudged apart - see [MidiParser]) to whole mc
  * ticks for the default tick-locked playback path. [tickMicros] is each note's true, unquantized
  * onset in microseconds since song start, used only by playback modes that can schedule sub-tick.
+ *
+ * [durationMicros] is how long after onset the matching MIDI note-off arrived, used to cut a
+ * still-ringing sample short (see [io.github.jwyoon1220.openMCMelody.playback.PlaybackManager]'s
+ * stopSound scheduling) - or `-1` when the source file never sent a matching note-off for that
+ * note, meaning the sample should just be left to decay/end naturally.
  */
 class ParsedSong(
     val sourceFileName: String,
@@ -24,6 +29,7 @@ class ParsedSong(
     val vanillaPitch: FloatArray,
     val customPitch: FloatArray,
     val volume: FloatArray,
+    val durationMicros: LongArray,
     val totalTicks: Int,
 ) {
     val size: Int get() = tick.size

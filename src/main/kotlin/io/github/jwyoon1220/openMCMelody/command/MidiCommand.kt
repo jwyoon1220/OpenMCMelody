@@ -22,6 +22,7 @@ import io.papermc.paper.command.brigadier.CommandSourceStack
 import io.papermc.paper.command.brigadier.Commands
 import io.papermc.paper.command.brigadier.argument.ArgumentTypes
 import io.papermc.paper.command.brigadier.argument.resolvers.selector.PlayerSelectorArgumentResolver
+import net.kyori.adventure.text.Component
 import org.bukkit.Bukkit
 import org.bukkit.command.CommandSender
 import org.bukkit.entity.Player
@@ -69,11 +70,23 @@ class MidiCommand(
                 Commands.literal("play")
                     .requires { it.sender.hasPermission(PERM_ADMIN) }
                     .then(
+                        // Deliberately NOT a greedy string here, unlike the targeted branch below.
+                        // A greedy filename always consumes the entire remaining input - including
+                        // what would otherwise be a target name - so Brigadier's parser matched
+                        // this branch for every input and the targeted branch below could never be
+                        // reached at all. Quotable single-token string avoids that ambiguity; a
+                        // filename with spaces just needs quotes ("My Song.mid") when played to self.
                         Commands.argument("filename", StringArgumentType.string())
                             .suggests(MidiSuggestions.midiFiles(midiFolder))
-                            .executes { handlePlay(it, false) }
+                            .executes { handlePlay(it, false) },
+                    )
+                    .then(
+                        // Once target is present it consumes the first token unambiguously, so the
+                        // trailing filename here can safely be greedy (spaces work without quoting).
+                        Commands.argument("target", ArgumentTypes.players())
                             .then(
-                                Commands.argument("target", ArgumentTypes.players())
+                                Commands.argument("filename", StringArgumentType.greedyString())
+                                    .suggests(MidiSuggestions.midiFiles(midiFolder))
                                     .executes { handlePlay(it, true) },
                             ),
                     ),
@@ -92,7 +105,7 @@ class MidiCommand(
                     .requires { it.sender.hasPermission(PERM_STATUS) }
                     .executes { handleStatus(it, false) }
                     .then(
-                        Commands.argument("player", ArgumentTypes.players())
+                        Commands.argument("target", ArgumentTypes.players())
                             .requires { it.sender.hasPermission(PERM_ADMIN) }
                             .executes { handleStatus(it, true) },
                     ),
@@ -170,15 +183,22 @@ class MidiCommand(
                         ),
                     )
                     .then(
-                        Commands.literal("play").then(
-                            Commands.argument("name", StringArgumentType.string())
-                                .suggests(MidiSuggestions.playlistNames(playlistManager))
-                                .executes { handlePlaylistPlay(it, false) }
-                                .then(
-                                    Commands.argument("target", ArgumentTypes.players())
-                                        .executes { handlePlaylistPlay(it, true) },
-                                ),
-                        ),
+                        Commands.literal("play")
+                            .then(
+                                // Target-first, matching vanilla commands like /effect give or
+                                // /give (target before the rest of the arguments).
+                                Commands.argument("name", StringArgumentType.string())
+                                    .suggests(MidiSuggestions.playlistNames(playlistManager))
+                                    .executes { handlePlaylistPlay(it, false) },
+                            )
+                            .then(
+                                Commands.argument("target", ArgumentTypes.players())
+                                    .then(
+                                        Commands.argument("name", StringArgumentType.string())
+                                            .suggests(MidiSuggestions.playlistNames(playlistManager))
+                                            .executes { handlePlaylistPlay(it, true) },
+                                    ),
+                            ),
                     ),
             )
             .then(
@@ -204,10 +224,14 @@ class MidiCommand(
                         Commands.literal("fromsf2").then(
                             Commands.argument("sf2file", StringArgumentType.string())
                                 .suggests(MidiSuggestions.soundFonts(soundfontsFolder))
-                                .then(
-                                    Commands.argument("packname", StringArgumentType.string())
-                                        .executes { handleSoundpackFromSf2(it) },
-                                ),
+                                .executes { handleSoundpackFromSf2(it) },
+                        ),
+                    )
+                    .then(
+                        Commands.literal("rebuild").then(
+                            Commands.argument("name", StringArgumentType.string())
+                                .suggests(MidiSuggestions.soundPacks(soundPackManager))
+                                .executes { handleSoundpackRebuild(it) },
                         ),
                     ),
             )
@@ -290,7 +314,7 @@ class MidiCommand(
     private fun handleStatus(ctx: CommandContext<CommandSourceStack>, hasArg: Boolean): Int {
         val sender = ctx.source.sender
         val target: Player? = if (hasArg) {
-            resolvePlayers(ctx, "player").firstOrNull()?.let { Bukkit.getPlayer(it) }
+            resolvePlayers(ctx, "target").firstOrNull()?.let { Bukkit.getPlayer(it) }
         } else {
             sender as? Player
         }
@@ -540,30 +564,70 @@ class MidiCommand(
     private fun handleSoundpackFromSf2(ctx: CommandContext<CommandSourceStack>): Int {
         val sender = ctx.source.sender
         val sf2Name = StringArgumentType.getString(ctx, "sf2file")
-        val packName = StringArgumentType.getString(ctx, "packname")
 
         val sf2File = File(soundfontsFolder, sf2Name)
         if (!sf2File.isFile) {
             sender.sendMessage("Soundfont file not found in soundfonts/: $sf2Name")
             return Command.SINGLE_SUCCESS
         }
+        val packName = sf2File.nameWithoutExtension
 
-        sender.sendMessage("Extracting instruments from '$sf2Name'... this can take a minute.")
+        sender.sendMessage("Extracting instruments from '$sf2Name' into soundpack '$packName'... this can take a minute.")
+        runSoundFontConversion(sender, sf2File, packName)
+        return Command.SINGLE_SUCCESS
+    }
+
+    /**
+     * Re-runs extraction for a soundpack that was previously built with `fromsf2`, using whatever
+     * the source soundfont/extractor logic currently does - e.g. to pick up longer sustained-note
+     * samples after a plugin update, without the caller needing to remember/re-type the original
+     * `.sf2`/`.dls` filename (recorded in the pack's pack.yml, see [SoundPackLoader.sourceSoundfont]).
+     */
+    private fun handleSoundpackRebuild(ctx: CommandContext<CommandSourceStack>): Int {
+        val sender = ctx.source.sender
+        val packName = StringArgumentType.getString(ctx, "name")
+
+        val packFolder = File(soundpacksFolder, packName)
+        if (!packFolder.isDirectory) {
+            sender.sendMessage("No soundpack folder named '$packName' under soundpacks/")
+            return Command.SINGLE_SUCCESS
+        }
+        val sf2Name = SoundPackLoader.sourceSoundfont(packFolder)
+        if (sf2Name == null) {
+            sender.sendMessage("Soundpack '$packName' has no recorded source soundfont - it wasn't auto-generated by /midi soundpack fromsf2, so it can't be rebuilt automatically.")
+            return Command.SINGLE_SUCCESS
+        }
+        val sf2File = File(soundfontsFolder, sf2Name)
+        if (!sf2File.isFile) {
+            sender.sendMessage("Source soundfont '$sf2Name' for '$packName' is no longer in soundfonts/, so it can't be rebuilt.")
+            return Command.SINGLE_SUCCESS
+        }
+
+        sender.sendMessage("Re-extracting instruments for soundpack '$packName' from '$sf2Name'... this can take a minute.")
+        runSoundFontConversion(sender, sf2File, packName)
+        return Command.SINGLE_SUCCESS
+    }
+
+    private fun runSoundFontConversion(sender: CommandSender, sf2File: File, packName: String) {
+        val mainExecutor = BukkitExecutors.main(plugin)
         CompletableFuture.supplyAsync(
-            { soundFontConverter.convert(sf2File, File(soundpacksFolder, packName), packName) },
+            {
+                soundFontConverter.convert(sf2File, File(soundpacksFolder, packName), packName) { percent, message ->
+                    mainExecutor.execute { sender.sendActionBar(Component.text("$percent%: $message")) }
+                }
+            },
             BukkitExecutors.async(plugin),
         ).consumeOnMainThread { result, throwable ->
             if (throwable != null) {
-                sender.sendMessage("Failed to convert '$sf2Name': ${throwable.message}")
+                sender.sendMessage("Failed to convert '${sf2File.name}': ${throwable.message}")
             } else if (result != null) {
                 sender.sendMessage(
-                    "Created soundpack '$packName' from '$sf2Name': ${result.renderedSlots.size} instrument(s)" +
+                    "Built soundpack '$packName' from '${sf2File.name}': ${result.renderedSlots.size} instrument(s)" +
                         (if (result.failedConversions > 0) ", ${result.failedConversions} failed to encode" else "") +
                         ". Run /midi soundpack build $packName to verify, then activate it.",
                 )
             }
         }
-        return Command.SINGLE_SUCCESS
     }
 
     // ---- helpers ----

@@ -53,13 +53,14 @@ All commands are under `/midi`:
 | Command | Description | Permission |
 |---|---|---|
 | `/midi list` | List available MIDI files | `openmcmelody.midi.admin` |
-| `/midi play <filename> [target]` | Play a MIDI file to yourself or a target | `openmcmelody.midi.admin` |
+| `/midi play [target] <filename>` | Play a MIDI file to yourself or a target (quote the filename if playing to yourself and it has spaces; unquoted spaces work once a target is given) | `openmcmelody.midi.admin` |
 | `/midi stop [target]` | Stop playback | `openmcmelody.midi.admin` |
-| `/midi status [player]` | Show current playback status | `openmcmelody.midi.status` (own), `.admin` (others) |
+| `/midi status [target]` | Show current playback status | `openmcmelody.midi.status` (own), `.admin` (others) |
 | `/midi pause [target]` / `/midi resume [target]` | Pause/resume playback | `openmcmelody.midi.status` (own), `.admin` (others) |
 | `/midi playlist list\|show\|create\|delete\|add\|remove\|play` | Manage and play shared playlists | `openmcmelody.midi.playlist` |
 | `/midi soundpack list\|build\|activate\|deactivate` | Manage custom soundpacks | `openmcmelody.midi.admin` |
-| `/midi soundpack fromsf2 <file> <packname>` | Build a soundpack from a `.sf2`/`.dls` file | `openmcmelody.midi.admin` |
+| `/midi soundpack fromsf2 <file>` | Build a soundpack from a `.sf2`/`.dls` file (pack name = filename without extension) | `openmcmelody.midi.admin` |
+| `/midi soundpack rebuild <name>` | Re-extract a `fromsf2`-generated soundpack from its original soundfont | `openmcmelody.midi.admin` |
 | `/midi verify <code>` | Confirm a web UI login | everyone |
 
 Console must always specify an explicit `target`/`player` — it has no implicit self-target.
@@ -87,7 +88,9 @@ sounds:
 
 Sound files must already be Ogg Vorbis (`.ogg`). Any slot you don't define falls back to Minecraft's vanilla note block sound. Use `/midi soundpack build <name>` to validate and zip it, then `/midi soundpack activate <name>` to push it to online players (requires `web.public-url` to be set).
 
-To generate one automatically from a soundfont, drop a `.sf2`/`.dls` file into `soundpacks/../soundfonts/` and run `/midi soundpack fromsf2 <file> <packname>` — this needs `ffmpeg` installed and reachable.
+To generate one automatically from a soundfont, drop a `.sf2`/`.dls` file into `soundpacks/../soundfonts/` and run `/midi soundpack fromsf2 <file>` — the pack is named after the file (extension stripped), and progress ("42%: Extracting c_3 from gm.sf2") shows in your action bar while it works. Requires `ffmpeg` installed and reachable.
+
+Run `/midi soundpack rebuild <name>` to re-extract a `fromsf2`-generated pack from its original soundfont file (found automatically from the pack's own pack.yml) — useful after a plugin update changes how samples are captured, without needing to re-type the soundfont filename or pack name.
 
 ### Web control panel
 
@@ -155,13 +158,14 @@ soundfont:
 | 명령어 | 설명 | 권한 |
 |---|---|---|
 | `/midi list` | 사용 가능한 MIDI 파일 목록 표시 | `openmcmelody.midi.admin` |
-| `/midi play <파일명> [대상]` | 자신 또는 대상에게 MIDI 파일 재생 | `openmcmelody.midi.admin` |
+| `/midi play [대상] <파일명>` | 자신 또는 대상에게 MIDI 파일 재생 (자신에게 재생 시 공백이 있으면 따옴표 필요; 대상을 지정하면 따옴표 없이도 공백 가능) | `openmcmelody.midi.admin` |
 | `/midi stop [대상]` | 재생 중지 | `openmcmelody.midi.admin` |
-| `/midi status [플레이어]` | 현재 재생 상태 확인 | 본인: `openmcmelody.midi.status`, 타인: `.admin` |
+| `/midi status [대상]` | 현재 재생 상태 확인 | 본인: `openmcmelody.midi.status`, 타인: `.admin` |
 | `/midi pause [대상]` / `/midi resume [대상]` | 재생 일시정지/재개 | 본인: `openmcmelody.midi.status`, 타인: `.admin` |
 | `/midi playlist list\|show\|create\|delete\|add\|remove\|play` | 공유 재생목록 관리 및 재생 | `openmcmelody.midi.playlist` |
 | `/midi soundpack list\|build\|activate\|deactivate` | 커스텀 사운드팩 관리 | `openmcmelody.midi.admin` |
-| `/midi soundpack fromsf2 <파일> <팩이름>` | `.sf2`/`.dls` 파일로부터 사운드팩 생성 | `openmcmelody.midi.admin` |
+| `/midi soundpack fromsf2 <파일>` | `.sf2`/`.dls` 파일로부터 사운드팩 생성 (팩 이름은 확장자를 뺀 파일 이름) | `openmcmelody.midi.admin` |
+| `/midi soundpack rebuild <이름>` | `fromsf2`로 만든 사운드팩을 원본 사운드폰트에서 다시 추출 | `openmcmelody.midi.admin` |
 | `/midi verify <코드>` | 웹 UI 로그인 확인 | 모든 사용자 |
 
 콘솔에서는 자기 자신을 대상으로 할 수 없으므로 항상 `target`/`player`를 명시해야 합니다.
@@ -189,7 +193,9 @@ sounds:
 
 사운드 파일은 반드시 Ogg Vorbis(`.ogg`) 형식이어야 합니다. 정의하지 않은 슬롯은 마인크래프트 기본(vanilla) 노트블록 소리로 대체됩니다. `/midi soundpack build <이름>`으로 검증 및 압축한 뒤, `/midi soundpack activate <이름>`으로 온라인 플레이어에게 전달합니다 (`web.public-url` 설정 필요).
 
-사운드폰트로부터 자동 생성하려면 `.sf2`/`.dls` 파일을 `soundfonts/` 폴더에 넣고 `/midi soundpack fromsf2 <파일> <팩이름>`을 실행하세요 — 이 경우 `ffmpeg`가 설치되어 있어야 합니다.
+사운드폰트로부터 자동 생성하려면 `.sf2`/`.dls` 파일을 `soundfonts/` 폴더에 넣고 `/midi soundpack fromsf2 <파일>`을 실행하세요 — 팩 이름은 파일 이름(확장자 제외)으로 자동 지정되고, 작업 중에는 액션바에 진행률("42%: Extracting c_3 from gm.sf2")이 표시됩니다. `ffmpeg`가 설치되어 있어야 합니다.
+
+`/midi soundpack rebuild <이름>`을 실행하면 `fromsf2`로 만든 사운드팩을 원본 사운드폰트 파일(pack.yml에 자동 기록됨)로부터 다시 추출합니다 — 플러그인 업데이트로 샘플 추출 방식이 바뀐 뒤 사운드폰트 파일명이나 팩 이름을 다시 입력할 필요 없이 갱신할 때 유용합니다.
 
 ### 웹 제어판
 

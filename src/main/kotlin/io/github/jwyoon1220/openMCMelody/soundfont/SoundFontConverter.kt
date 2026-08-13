@@ -6,6 +6,9 @@ import java.io.IOException
 import java.nio.file.Files
 import java.util.concurrent.TimeUnit
 
+/** How much of the 0-100 progress range extraction consumes before ffmpeg encoding takes the rest. */
+private const val EXTRACTION_WEIGHT_PERCENT = 80
+
 /**
  * Turns a `.sf2`/`.dls` soundfont into a full soundpack folder (`pack.yml` + one `.ogg` per GM
  * instrument the font actually defines) - the automated equivalent of how the bundled `ms-gm`
@@ -26,12 +29,25 @@ class SoundFontConverter(private val plugin: Plugin, private val ffmpegPath: Str
     class ConversionException(message: String) : Exception(message)
     class ConversionResult(val renderedSlots: List<String>, val failedConversions: Int)
 
-    fun convert(soundFontFile: File, packFolder: File, packName: String): ConversionResult {
+    /**
+     * @param onProgress called (from whatever thread [convert] itself runs on - callers already
+     * run this off the main thread) with a 0-100 percent and a short human-readable status, e.g.
+     * `(37, "Extracting c_1 from gm.sf2")`. Extraction is weighted [EXTRACTION_WEIGHT_PERCENT] of
+     * the bar and ffmpeg encoding the remainder, since extraction dominates wall-clock time.
+     */
+    fun convert(
+        soundFontFile: File,
+        packFolder: File,
+        packName: String,
+        onProgress: (Int, String) -> Unit = { _, _ -> },
+    ): ConversionResult {
         if (!soundFontFile.isFile) throw ConversionException("Soundfont file not found: ${soundFontFile.name}")
 
         val tempDir = Files.createTempDirectory("omm-sf2-").toFile()
         try {
-            runExtractor(soundFontFile, tempDir)
+            runExtractor(soundFontFile, tempDir) { percent, slot ->
+                onProgress(percent, "Extracting $slot from ${soundFontFile.name}")
+            }
 
             val manifestFile = File(tempDir, "manifest.txt")
             if (!manifestFile.isFile) throw ConversionException("Soundfont extraction produced no manifest (unknown failure)")
@@ -42,7 +58,10 @@ class SoundFontConverter(private val plugin: Plugin, private val ffmpegPath: Str
 
             packFolder.mkdirs()
             val renderedSlots = mutableListOf<String>()
-            for ((slot, wavName) in entries) {
+            for ((index, entry) in entries.withIndex()) {
+                val (slot, wavName) = entry
+                val percent = EXTRACTION_WEIGHT_PERCENT + (index + 1) * (100 - EXTRACTION_WEIGHT_PERCENT) / entries.size
+                onProgress(percent, "Encoding $slot.ogg")
                 if (runFfmpeg(File(tempDir, wavName), File(packFolder, "$slot.ogg"))) renderedSlots += slot
             }
             if (renderedSlots.isEmpty()) {
@@ -56,7 +75,7 @@ class SoundFontConverter(private val plugin: Plugin, private val ffmpegPath: Str
         }
     }
 
-    private fun runExtractor(soundFontFile: File, outputDir: File) {
+    private fun runExtractor(soundFontFile: File, outputDir: File, onProgress: (Int, String) -> Unit) {
         val javaExe = File(System.getProperty("java.home"), if (isWindows()) "bin/java.exe" else "bin/java")
         val pluginJar = File(javaClass.protectionDomain.codeSource.location.toURI())
 
@@ -73,7 +92,18 @@ class SoundFontConverter(private val plugin: Plugin, private val ffmpegPath: Str
             throw ConversionException("Could not launch the soundfont extraction process: ${e.message}")
         }
 
-        val output = process.inputStream.bufferedReader().readText()
+        val output = StringBuilder()
+        process.inputStream.bufferedReader().forEachLine { line ->
+            output.append(line).append('\n')
+            val fields = line.split('\t')
+            if (fields.size == 4 && fields[0] == "PROGRESS") {
+                val index = fields[1].toIntOrNull()
+                val total = fields[2].toIntOrNull()
+                if (index != null && total != null && total > 0) {
+                    onProgress(index * EXTRACTION_WEIGHT_PERCENT / total, fields[3])
+                }
+            }
+        }
         val finished = process.waitFor(120, TimeUnit.SECONDS)
         if (!finished) {
             process.destroyForcibly()
@@ -105,6 +135,9 @@ class SoundFontConverter(private val plugin: Plugin, private val ffmpegPath: Str
         val sb = StringBuilder()
         sb.append("name: ").append(yamlQuote(packName)).append('\n')
         sb.append("description: ").append(yamlQuote("Auto-generated from $sourceName")).append('\n')
+        // Read back by SoundPackLoader.sourceSoundfont() so `/midi soundpack rebuild` can find the
+        // original file without the caller having to re-specify it.
+        sb.append("source-soundfont: ").append(yamlQuote(sourceName)).append('\n')
         sb.append("sounds:\n")
         for (slot in slots) sb.append("  ").append(slot).append(": ").append(slot).append(".ogg\n")
         File(packFolder, "pack.yml").writeText(sb.toString())

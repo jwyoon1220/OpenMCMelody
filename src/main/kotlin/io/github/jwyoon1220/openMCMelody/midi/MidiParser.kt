@@ -68,8 +68,15 @@ object MidiParser {
         var vanillaPitchBuf = FloatArray(1024)
         var customPitchBuf = FloatArray(1024)
         var volumeBuf = FloatArray(1024)
+        var durationMicrosBuf = LongArray(1024)
         var count = 0
         var maxTick = 0
+
+        // Matches each note-on to its note-off so durationMicrosBuf can carry a real length instead
+        // of playing every sample to its natural end. Keyed by channel*128+note; a deque (not a
+        // single slot) because the same pitch can retrigger before its previous note-off arrives,
+        // and note-offs must pair with the oldest still-open onset first.
+        val pendingNoteStarts = HashMap<Int, ArrayDeque<Int>>()
 
         // Minecraft only delivers sound at 20Hz, so any notes originally spaced closer together
         // than one mc tick (50ms) - a fast arpeggio, a grace note, a trill - would otherwise round
@@ -92,6 +99,7 @@ object MidiParser {
                 vanillaPitchBuf = vanillaPitchBuf.copyOf(newSize)
                 customPitchBuf = customPitchBuf.copyOf(newSize)
                 volumeBuf = volumeBuf.copyOf(newSize)
+                durationMicrosBuf = durationMicrosBuf.copyOf(newSize)
             }
         }
 
@@ -129,9 +137,20 @@ object MidiParser {
                 continue
             }
 
+            val isNoteOff = message.command == ShortMessage.NOTE_OFF ||
+                (message.command == ShortMessage.NOTE_ON && message.data2 <= 0)
+            if (isNoteOff) {
+                val queue = pendingNoteStarts[message.channel * 128 + message.data1]
+                if (!queue.isNullOrEmpty()) {
+                    val idx = queue.removeFirst()
+                    val offMicros = Math.round(elapsedMicrosAt(indexed.tick))
+                    durationMicrosBuf[idx] = (offMicros - tickMicrosBuf[idx]).coerceAtLeast(0L)
+                }
+                continue
+            }
+
             if (message.command != ShortMessage.NOTE_ON) continue
             val velocity = message.data2
-            if (velocity <= 0) continue // velocity-0 NOTE_ON is a de facto note-off
 
             val note = message.data1
             val channel = message.channel
@@ -169,6 +188,8 @@ object MidiParser {
             vanillaPitchBuf[count] = resolution.vanillaPitch
             customPitchBuf[count] = resolution.customPitch
             volumeBuf[count] = dynamics.coerceIn(0.2f, 1.0f)
+            durationMicrosBuf[count] = -1L // overwritten if/when a matching note-off is found later
+            pendingNoteStarts.getOrPut(channel * 128 + note) { ArrayDeque() }.addLast(count)
             count++
         }
 
@@ -180,6 +201,7 @@ object MidiParser {
             vanillaPitch = vanillaPitchBuf.copyOf(count),
             customPitch = customPitchBuf.copyOf(count),
             volume = volumeBuf.copyOf(count),
+            durationMicros = durationMicrosBuf.copyOf(count),
             totalTicks = maxTick,
         )
     }
