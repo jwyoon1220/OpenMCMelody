@@ -115,5 +115,41 @@ class SoundPackManager(private val soundpacksFolder: File, private val stateFile
         return checkpoints.minByOrNull { (holdMillis, _) -> kotlin.math.abs(holdMillis - heldMillis) }?.second
     }
 
+    /**
+     * A single resolved sound key to actually pass to a `playSound` call for a note, plus whether
+     * it's [selfTerminating] - see [resolvePlaybackSound]'s doc.
+     */
+    class SoundResolution(val customKey: String?, val releaseKey: String?, val selfTerminating: Boolean)
+
+    /**
+     * Picks which sound actually gets played for [slot] given the note's real [durationMicros].
+     *
+     * When the active soundpack has duration checkpoints for this slot (see
+     * [io.github.jwyoon1220.openMCMelody.midi.GmNames.RELEASE_HOLD_CHECKPOINTS_SECONDS]/
+     * [io.github.jwyoon1220.openMCMelody.soundfont.SoundFontExtractorMain] - each one a complete
+     * "held for about this long, then let go" performance already ending in its own natural decay)
+     * and the note's duration is known and shorter than the full sustained sample, this plays the
+     * checkpoint whose hold length is closest to it outright and marks the result
+     * [SoundResolution.selfTerminating] - no stopSound cutoff is ever needed for it, since the clip
+     * already ends on its own at roughly the right time. This is the common case for most real
+     * notes (much shorter than a multi-second capture).
+     *
+     * Falls back to the long sustained sample (paired with [releaseKey] for callers that still
+     * splice a short release tail onto a hard stopSound cutoff) whenever the pack has no
+     * checkpoints for this slot, or the duration is unknown or already at least as long as the
+     * sample - i.e. genuinely meant to ring out or held indefinitely.
+     */
+    fun resolvePlaybackSound(slot: InstrumentSlot, durationMicros: Long): SoundResolution {
+        val customKey = resolve(slot)
+        if (customKey == null || !slot.needsExplicitCutoff()) return SoundResolution(customKey, null, false)
+        val naturalMicros = (slot.naturalSampleSeconds() * 1_000_000).toLong()
+        if (durationMicros in 0 until naturalMicros) {
+            val matched = resolveRelease(slot, durationMicros / 1000)
+            if (matched != null) return SoundResolution(matched, null, true)
+        }
+        val releaseKey = resolveRelease(slot, durationMicros.coerceAtLeast(0) / 1000)
+        return SoundResolution(customKey, releaseKey, false)
+    }
+
     private fun resourcePackUrl(publicUrl: String, name: String) = "$publicUrl/resourcepack/$name.zip"
 }

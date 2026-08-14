@@ -69,6 +69,7 @@ object MidiParser {
         var customPitchBuf = FloatArray(1024)
         var volumeBuf = FloatArray(1024)
         var durationMicrosBuf = LongArray(1024)
+        var rawNoteBuf = IntArray(1024)
         var count = 0
         var maxTick = 0
 
@@ -100,6 +101,7 @@ object MidiParser {
                 customPitchBuf = customPitchBuf.copyOf(newSize)
                 volumeBuf = volumeBuf.copyOf(newSize)
                 durationMicrosBuf = durationMicrosBuf.copyOf(newSize)
+                rawNoteBuf = rawNoteBuf.copyOf(newSize)
             }
         }
 
@@ -189,6 +191,7 @@ object MidiParser {
             customPitchBuf[count] = resolution.customPitch
             volumeBuf[count] = dynamics.coerceIn(0.2f, 1.0f)
             durationMicrosBuf[count] = -1L // overwritten if/when a matching note-off is found later
+            rawNoteBuf[count] = note
             pendingNoteStarts.getOrPut(channel * 128 + note) { ArrayDeque() }.addLast(count)
             count++
         }
@@ -202,6 +205,7 @@ object MidiParser {
             customPitch = customPitchBuf.copyOf(count),
             volume = volumeBuf.copyOf(count),
             durationMicros = durationMicrosBuf.copyOf(count),
+            rawNote = rawNoteBuf.copyOf(count),
             totalTicks = maxTick,
         )
     }

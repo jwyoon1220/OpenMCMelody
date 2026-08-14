@@ -71,6 +71,7 @@ class PlaybackManager(
     private var batchCustomPitch = FloatArray(32)
     private var batchVolume = FloatArray(32)
     private var batchDurationMicros = LongArray(32)
+    private var batchRawNote = IntArray(32)
     private var batchSize = 0
 
     // Advances on every dispatched note (both tick-locked and instant paths) - see ROTATING_CATEGORIES.
@@ -82,6 +83,20 @@ class PlaybackManager(
     // allocateVoice's doc for why this exists.
     private val voiceOwners = ConcurrentHashMap<VoiceKey, Long>()
     private var nextVoiceId = 0L
+
+    // Raw MIDI note carried by whichever note currently owns each (sound identity, category) slot
+    // above - kept alongside voiceOwners (same key, updated together) so allocateCategory can judge
+    // an owner's consonance/dissonance against everything else currently ringing when deciding
+    // whether an incoming, more-dissonant note should preempt it. See allocateVoice's doc.
+    private val voiceOwnerNotes = ConcurrentHashMap<VoiceKey, Int>()
+
+    // Every currently-ringing note across the whole song (not just ones that hold exclusive voice
+    // ownership above) - the pool allocateCategory's consonance/dissonance judgement is scored
+    // against, since a clash is just as audible whether or not the clashing note happens to own a
+    // stopSound-cutoff slot. Entries expire themselves via instantExecutor once their note's own
+    // ring time elapses - see registerRinging.
+    private val ringingNotes = ConcurrentHashMap<Long, Int>()
+    private var nextRingingId = 0L
 
     // (soundIdentity, category) uniquely identifies a slot Minecraft's stopSound(sound, category)
     // can target - soundIdentity is either the custom sound key (String) or the vanilla Sound enum
@@ -106,6 +121,8 @@ class PlaybackManager(
         activeSessions.clear()
         sessionsByTarget.clear()
         voiceOwners.clear()
+        voiceOwnerNotes.clear()
+        ringingNotes.clear()
     }
 
     fun startSession(targets: Set<UUID>, song: ParsedSong, mode: SessionMode, playlistName: String? = null): PlaybackSession {
@@ -223,7 +240,7 @@ class PlaybackManager(
             val song = session.song
             while (session.nextEventIndex < song.size && song.tick[session.nextEventIndex] <= session.cursorTick) {
                 val idx = session.nextEventIndex
-                batchAdd(song.sound[idx], song.vanillaPitch[idx], song.customPitch[idx], song.volume[idx], song.durationMicros[idx])
+                batchAdd(song.sound[idx], song.vanillaPitch[idx], song.customPitch[idx], song.volume[idx], song.durationMicros[idx], song.rawNote[idx])
                 session.nextEventIndex++
             }
             if (batchSize > 0) {
@@ -270,7 +287,7 @@ class PlaybackManager(
         }
     }
 
-    private fun batchAdd(slot: InstrumentSlot, vanillaPitch: Float, customPitch: Float, volume: Float, durationMicros: Long) {
+    private fun batchAdd(slot: InstrumentSlot, vanillaPitch: Float, customPitch: Float, volume: Float, durationMicros: Long, rawNote: Int) {
         // Dedupe key is (slot, vanillaPitch): slot already distinguishes octave bucket, and within
         // a bucket vanillaPitch and customPitch move together (both derived from the same note),
         // so this can't merge two notes that would actually use different customPitch values.
@@ -290,12 +307,14 @@ class PlaybackManager(
             batchCustomPitch = batchCustomPitch.copyOf(newSize)
             batchVolume = batchVolume.copyOf(newSize)
             batchDurationMicros = batchDurationMicros.copyOf(newSize)
+            batchRawNote = batchRawNote.copyOf(newSize)
         }
         batchSlot[batchSize] = slot
         batchVanillaPitch[batchSize] = vanillaPitch
         batchCustomPitch[batchSize] = customPitch
         batchVolume[batchSize] = volume
         batchDurationMicros[batchSize] = durationMicros
+        batchRawNote[batchSize] = rawNote
         batchSize++
     }
 
@@ -304,21 +323,25 @@ class PlaybackManager(
             val order = (0 until batchSize).sortedByDescending { batchVolume[it] }
             for (i in 0 until MAX_NOTES_PER_TICK) {
                 val idx = order[i]
-                playToTargets(targets, batchSlot[idx]!!, batchVanillaPitch[idx], batchCustomPitch[idx], batchVolume[idx], batchDurationMicros[idx])
+                playToTargets(targets, batchSlot[idx]!!, batchVanillaPitch[idx], batchCustomPitch[idx], batchVolume[idx], batchDurationMicros[idx], batchRawNote[idx])
             }
         } else {
             for (i in 0 until batchSize) {
-                playToTargets(targets, batchSlot[i]!!, batchVanillaPitch[i], batchCustomPitch[i], batchVolume[i], batchDurationMicros[i])
+                playToTargets(targets, batchSlot[i]!!, batchVanillaPitch[i], batchCustomPitch[i], batchVolume[i], batchDurationMicros[i], batchRawNote[i])
             }
         }
         batchSize = 0
     }
 
-    private fun playToTargets(targets: Set<UUID>, slot: InstrumentSlot, vanillaPitch: Float, customPitch: Float, volume: Float, durationMicros: Long) {
+    private fun playToTargets(targets: Set<UUID>, slot: InstrumentSlot, vanillaPitch: Float, customPitch: Float, volume: Float, durationMicros: Long, rawNote: Int) {
         // Resolved once per note (not per target) - the active soundpack can't change mid-flush.
-        val customKey = soundPackManager.resolve(slot)
-        val releaseKey = customKey?.let { soundPackManager.resolveRelease(slot, durationMicros.coerceAtLeast(0) / 1000) }
-        val voice = allocateVoice(customKey ?: slot.vanilla, slot, durationMicros)
+        val resolution = soundPackManager.resolvePlaybackSound(slot, durationMicros)
+        val customKey = resolution.customKey
+        val voice = if (resolution.selfTerminating) {
+            allocateSelfTerminatingVoice(customKey!!, rawNote, durationMicros / 1000)
+        } else {
+            allocateVoice(customKey ?: slot.vanilla, slot, durationMicros, rawNote)
+        }
         val locations = LinkedHashMap<Player, Location>(targets.size)
         for (uuid in targets) {
             val player = Bukkit.getPlayer(uuid) ?: continue
@@ -330,7 +353,9 @@ class PlaybackManager(
                 player.playSound(location, slot.vanilla, voice.category, volume, vanillaPitch)
             }
         }
-        if (locations.isNotEmpty()) scheduleRelease(voice, 0, locations, customKey, slot.vanilla, releaseKey, customPitch, volume)
+        if (locations.isNotEmpty() && !resolution.selfTerminating) {
+            scheduleRelease(voice, 0, locations, customKey, slot.vanilla, resolution.releaseKey, customPitch, volume)
+        }
     }
 
     /**
@@ -341,9 +366,18 @@ class PlaybackManager(
      * 1. Category selection prefers one not currently owned by another still-ringing note that
      *    uses the exact same sound identity (same custom sound key, or - for vanilla fallback -
      *    same [InstrumentSlot.vanilla], which Minecraft's 16 note block timbres share across an
-     *    entire GM instrument *family*, not just one instrument). Falls back to plain round-robin
-     *    only once every category is already claimed for that sound (dense chords/runs exceeding
-     *    [ROTATING_CATEGORIES]'s size) - a rare, graceful degradation rather than a bug.
+     *    entire GM instrument *family*, not just one instrument). Once every category is already
+     *    claimed for that sound (dense chords/runs exceeding [ROTATING_CATEGORIES]'s size - very
+     *    reachable for [InstrumentSlot.needsExplicitCutoff] instruments, since [SoundPackManager.resolve]
+     *    keys by slot alone, so every note of a chord within one octave bucket shares one identity),
+     *    ownership of one of the contested categories is handed to whichever of {the incoming note,
+     *    each current owner} clashes *most* with everything else currently ringing - see
+     *    [dissonanceScore]/[ringingNotes] - since that's the note where losing its stopSound cutoff
+     *    and being left to ring past its real MIDI duration is most audible. A consonant incoming
+     *    note steps aside for a dissonant owner it can't outrank; a dissonant incoming note preempts
+     *    a more-consonant owner. The note that ends up without ownership still plays (a sound can
+     *    play under an already-claimed category slot just fine), it simply gets no cutoff - see
+     *    point 2.
      * 2. A cutoff is only ever scheduled for [InstrumentSlot.needsExplicitCutoff] slots - Minecraft's
      *    stopSound has no fade, so it's only worth an instant hard silence for instruments that
      *    would otherwise stay stuck ringing at a flat, undecayed volume for their whole multi-second
@@ -351,35 +385,119 @@ class PlaybackManager(
      *    ends it naturally, like a sampler's one-shot voice - trying to hard-cut *those* on every
      *    note's real MIDI duration (most notes, most of the time) is what made playback sound
      *    constantly "choppy" rather than actually more precise. Also skipped whenever the duration
-     *    is unknown or already at least as long as the sample.
+     *    is unknown, already at least as long as the sample, or - critically - whenever this note
+     *    didn't win ownership of its category (point 1): [Player.stopSound] silences *every*
+     *    currently playing sound matching (identity, category), not just this one instance, so a
+     *    note sharing its category with a still-ringing older note would otherwise get to hard-cut
+     *    that unrelated note out from under it the moment its own (possibly much shorter) duration
+     *    elapses - an audible mid-note cutoff that scaled with polyphony, and the actual remaining
+     *    source of "choppy" playback after point 3 below closed the stale-timer case.
      * 3. [scheduleRelease] re-checks ownership before actually calling stopSound, so a stale/late
      *    cutoff can never reach out and silence a *different*, newer note that has since taken
      *    over the same category+sound slot - that cross-talk (one track's release cutting off an
      *    unrelated note, worse the more concurrent notes/tracks there are) was the actual source
      *    of the "choppy" playback this replaces.
      */
-    private fun allocateVoice(soundIdentity: Any, slot: InstrumentSlot, durationMicros: Long): Voice {
-        val category = allocateCategory(soundIdentity)
+    private fun allocateVoice(soundIdentity: Any, slot: InstrumentSlot, durationMicros: Long, rawNote: Int): Voice {
+        val (category, exclusivelyOwned) = allocateCategory(soundIdentity, rawNote, slot.needsExplicitCutoff())
         val voiceId = nextVoiceId++
-        voiceOwners[VoiceKey(soundIdentity, category)] = voiceId
+        if (exclusivelyOwned) {
+            val key = VoiceKey(soundIdentity, category)
+            voiceOwners[key] = voiceId
+            voiceOwnerNotes[key] = rawNote
+        }
         val naturalMicros = (slot.naturalSampleSeconds() * 1_000_000).toLong()
-        val explicitStop = slot.needsExplicitCutoff() && durationMicros in 0 until naturalMicros
-        val releaseDelayMillis = (if (explicitStop) durationMicros else naturalMicros) / 1000
+        // Whether this note's real MIDI duration is short enough to cut off at all - independent of
+        // exclusivelyOwned, since that only decides whether we're actually *allowed* to enforce it
+        // with stopSound (see allocateCategory's doc). Using it here too, for how long the category
+        // stays reserved, matters even when we lost the ownership contest: Minecraft doesn't need a
+        // category "freed" to keep playing new sounds (that's purely our own bookkeeping), so
+        // holding one open for the full natural sample length on a note that both isn't going to be
+        // cut *and* was actually short would only starve the next same-instrument note of a category
+        // too - a snowball that made almost every note in a dense passage fall back to ringing out
+        // its full natural length instead of its real, usually much shorter, duration.
+        val cutoffEligible = slot.needsExplicitCutoff() && durationMicros in 0 until naturalMicros
+        val explicitStop = exclusivelyOwned && cutoffEligible
+        val releaseDelayMillis = (if (cutoffEligible) durationMicros else naturalMicros) / 1000
+        registerRinging(rawNote, releaseDelayMillis.coerceAtLeast(0))
         return Voice(soundIdentity, category, voiceId, explicitStop, releaseDelayMillis.coerceAtLeast(0))
     }
 
-    private fun allocateCategory(soundIdentity: Any): SoundCategory {
+    /**
+     * Allocates a voice for a note that's already resolved to a duration-matched, self-decaying
+     * checkpoint clip (see [SoundPackManager.resolvePlaybackSound]) - it will never need a stopSound cutoff, so unlike
+     * [allocateVoice] this never touches [voiceOwners]/[voiceOwnerNotes] at all: there's nothing to
+     * contest or protect, category assignment here is purely round-robin for spreading load across
+     * [ROTATING_CATEGORIES]. Still registers into [ringingNotes] so other, still-cutoff-eligible
+     * notes can judge consonance/dissonance against it.
+     */
+    private fun allocateSelfTerminatingVoice(soundIdentity: Any, rawNote: Int, ringMillis: Long): Voice {
+        val category = ROTATING_CATEGORIES[categoryCursor]
+        categoryCursor = (categoryCursor + 1) % ROTATING_CATEGORIES.size
+        val voiceId = nextVoiceId++
+        registerRinging(rawNote, ringMillis.coerceAtLeast(0))
+        return Voice(soundIdentity, category, voiceId, explicitStop = false, releaseDelayMillis = ringMillis.coerceAtLeast(0))
+    }
+
+    /**
+     * Returns the chosen category plus whether this note becomes its sole owner (false = every
+     * category was already claimed for [soundIdentity] and this note lost the dissonance-priority
+     * tiebreak, see [allocateVoice]'s doc). [contestable] gates the preemption fallback to
+     * [InstrumentSlot.needsExplicitCutoff] slots only - ownership is meaningless for anything else,
+     * since [allocateVoice] never schedules a cutoff for them regardless, so there's nothing worth
+     * contesting.
+     */
+    private fun allocateCategory(soundIdentity: Any, rawNote: Int, contestable: Boolean): Pair<SoundCategory, Boolean> {
         for (i in ROTATING_CATEGORIES.indices) {
             val idx = (categoryCursor + i) % ROTATING_CATEGORIES.size
             val category = ROTATING_CATEGORIES[idx]
             if (!voiceOwners.containsKey(VoiceKey(soundIdentity, category))) {
                 categoryCursor = (idx + 1) % ROTATING_CATEGORIES.size
-                return category
+                return category to true
+            }
+        }
+        if (contestable) {
+            var mostConsonantCategory: SoundCategory? = null
+            var mostConsonantScore = Int.MAX_VALUE
+            for (category in ROTATING_CATEGORIES) {
+                val ownerNote = voiceOwnerNotes[VoiceKey(soundIdentity, category)] ?: continue
+                val ownerScore = dissonanceScore(ownerNote)
+                if (ownerScore < mostConsonantScore) {
+                    mostConsonantScore = ownerScore
+                    mostConsonantCategory = category
+                }
+            }
+            if (mostConsonantCategory != null && dissonanceScore(rawNote) > mostConsonantScore) {
+                categoryCursor = (ROTATING_CATEGORIES.indexOf(mostConsonantCategory) + 1) % ROTATING_CATEGORIES.size
+                return mostConsonantCategory to true
             }
         }
         val category = ROTATING_CATEGORIES[categoryCursor]
         categoryCursor = (categoryCursor + 1) % ROTATING_CATEGORIES.size
-        return category
+        return category to false
+    }
+
+    // Interval-class (semitones mod 12) -> dissonance score: unison/octave and the perfect 5th/4th
+    // and 3rds/6ths count as consonant (low score), the tritone as maximally dissonant, 2nds/7ths in
+    // between - a standard, coarse tonal-consonance ranking, not a psychoacoustic model.
+    private val INTERVAL_DISSONANCE = intArrayOf(0, 5, 4, 1, 1, 1, 6, 0, 1, 1, 4, 5)
+
+    /** Worst-case clash of [rawNote] against every currently-ringing note (see [ringingNotes]) - 0 if nothing else is ringing. */
+    private fun dissonanceScore(rawNote: Int): Int {
+        var worst = 0
+        for (other in ringingNotes.values) {
+            val score = INTERVAL_DISSONANCE[Math.floorMod(rawNote - other, 12)]
+            if (score > worst) worst = score
+        }
+        return worst
+    }
+
+    /** Tracks [rawNote] as "currently ringing" for [dissonanceScore] until its own [delayMillis] ring time elapses. */
+    private fun registerRinging(rawNote: Int, delayMillis: Long) {
+        val executor = instantExecutor ?: return
+        val id = nextRingingId++
+        ringingNotes[id] = rawNote
+        executor.schedule({ ringingNotes.remove(id) }, delayMillis, TimeUnit.MILLISECONDS)
     }
 
     /**
@@ -451,13 +569,18 @@ class PlaybackManager(
         if (players.isEmpty()) return
         val locations = players.associateWith { it.location }
         val slot = song.sound[idx]
-        val customKey = soundPackManager.resolve(slot)
+        val rawNote = song.rawNote[idx]
         val vanillaPitch = song.vanillaPitch[idx]
         val customPitch = song.customPitch[idx]
         val volume = song.volume[idx]
         val durationMicros = song.durationMicros[idx]
-        val releaseKey = customKey?.let { soundPackManager.resolveRelease(slot, durationMicros.coerceAtLeast(0) / 1000) }
-        val voice = allocateVoice(customKey ?: slot.vanilla, slot, durationMicros)
+        val resolution = soundPackManager.resolvePlaybackSound(slot, durationMicros)
+        val customKey = resolution.customKey
+        val voice = if (resolution.selfTerminating) {
+            allocateSelfTerminatingVoice(customKey!!, rawNote, durationMicros / 1000)
+        } else {
+            allocateVoice(customKey ?: slot.vanilla, slot, durationMicros, rawNote)
+        }
         // Notes already due (song.tickMicros[idx] <= nowMicros, e.g. right after a lag spike) fire
         // with ~0 delay instead of waiting for a false "next tick" - see instantElapsedMicros.
         val delayMillis = (song.tickMicros[idx] - nowMicros).coerceAtLeast(0) / 1000
@@ -477,7 +600,9 @@ class PlaybackManager(
                 }
             }
         }, delayMillis, TimeUnit.MILLISECONDS)
-        scheduleRelease(voice, delayMillis, locations, customKey, slot.vanilla, releaseKey, customPitch, volume)
+        if (!resolution.selfTerminating) {
+            scheduleRelease(voice, delayMillis, locations, customKey, slot.vanilla, resolution.releaseKey, customPitch, volume)
+        }
     }
 
     private fun prefetchNextSong(session: PlaybackSession) {

@@ -20,6 +20,12 @@ package io.github.jwyoon1220.openMCMelody.midi
  * still-ringing sample short (see [io.github.jwyoon1220.openMCMelody.playback.PlaybackManager]'s
  * stopSound scheduling) - or `-1` when the source file never sent a matching note-off for that
  * note, meaning the sample should just be left to decay/end naturally.
+ *
+ * [rawNote] is the untouched MIDI note number (0-127, absolute pitch) the event was authored at -
+ * unlike [vanillaPitch]/[customPitch] (playback pitch multipliers relative to a slot's octave
+ * bucket center), this carries real pitch-class information, so it's what
+ * [io.github.jwyoon1220.openMCMelody.playback.PlaybackManager] compares notes against each other
+ * with to judge consonance/dissonance for voice-track priority.
  */
 class ParsedSong(
     val sourceFileName: String,
@@ -30,6 +36,7 @@ class ParsedSong(
     val customPitch: FloatArray,
     val volume: FloatArray,
     val durationMicros: LongArray,
+    val rawNote: IntArray,
     val totalTicks: Int,
 ) {
     val size: Int get() = tick.size

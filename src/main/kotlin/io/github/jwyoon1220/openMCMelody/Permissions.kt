@@ -4,4 +4,5 @@ object Permissions {
     const val ADMIN = "openmcmelody.midi.admin"
     const val PLAYLIST = "openmcmelody.midi.playlist"
     const val STATUS = "openmcmelody.midi.status"
+    const val JUKEBOX = "openmcmelody.midi.jukebox"
 }

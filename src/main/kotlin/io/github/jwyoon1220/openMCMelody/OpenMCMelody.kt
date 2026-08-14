@@ -1,6 +1,9 @@
 package io.github.jwyoon1220.openMCMelody
 
 import io.github.jwyoon1220.openMCMelody.command.MidiCommand
+import io.github.jwyoon1220.openMCMelody.jukebox.JukeboxListener
+import io.github.jwyoon1220.openMCMelody.jukebox.JukeboxPlaybackManager
+import io.github.jwyoon1220.openMCMelody.jukebox.SpecialJukeboxManager
 import io.github.jwyoon1220.openMCMelody.listener.PlayerConnectionListener
 import io.github.jwyoon1220.openMCMelody.midi.SongCache
 import io.github.jwyoon1220.openMCMelody.playback.PlaybackManager
@@ -17,6 +20,7 @@ import java.io.File
 class OpenMCMelody : JavaPlugin() {
 
     private var playbackManager: PlaybackManager? = null
+    private var jukeboxPlaybackManager: JukeboxPlaybackManager? = null
     private var webServer: WebServer? = null
 
     override fun onEnable() {
@@ -49,6 +53,12 @@ class OpenMCMelody : JavaPlugin() {
         this.playbackManager = playbackManager
 
         server.pluginManager.registerEvents(PlayerConnectionListener(playbackManager, soundPackManager, publicUrl), this)
+
+        val jukeboxManager = SpecialJukeboxManager(this, File(dataFolder, "jukeboxes.yml"))
+        val jukeboxPlaybackManager = JukeboxPlaybackManager(this, songCache, soundPackManager)
+        jukeboxPlaybackManager.enable()
+        this.jukeboxPlaybackManager = jukeboxPlaybackManager
+        server.pluginManager.registerEvents(JukeboxListener(this, jukeboxManager, jukeboxPlaybackManager, midiFolder), this)
 
         val webAuthManager = if (config.getBoolean("web.enabled", true)) {
             startWebServer(midiFolder, songCache, playbackManager, playlistManager, soundPackManager)
@@ -95,5 +105,7 @@ class OpenMCMelody : JavaPlugin() {
         webServer = null
         playbackManager?.disable()
         playbackManager = null
+        jukeboxPlaybackManager?.disable()
+        jukeboxPlaybackManager = null
     }
 }

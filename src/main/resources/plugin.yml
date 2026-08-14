@@ -15,3 +15,6 @@ permissions:
   openmcmelody.midi.status:
     description: Check your own current MIDI playback status.
     default: true
+  openmcmelody.midi.jukebox:
+    description: Convert jukeboxes into MIDI-playing jukeboxes and pick songs for them.
+    default: true
