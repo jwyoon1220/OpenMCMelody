@@ -7,6 +7,7 @@ import com.mojang.brigadier.tree.LiteralCommandNode
 import io.github.jwyoon1220.openMCMelody.Permissions
 import io.github.jwyoon1220.openMCMelody.midi.BukkitExecutors
 import io.github.jwyoon1220.openMCMelody.midi.SongCache
+import io.github.jwyoon1220.openMCMelody.midi.SongFiles
 import io.github.jwyoon1220.openMCMelody.playback.PlayMode
 import io.github.jwyoon1220.openMCMelody.playback.PlayModeManager
 import io.github.jwyoon1220.openMCMelody.playback.PlaybackManager
@@ -684,7 +685,7 @@ class MidiCommand(
     // ---- helpers ----
 
     private fun listMidiFiles(): List<String> =
-        midiFolder.listFiles { f -> f.isFile && f.name.endsWith(".mid", ignoreCase = true) }
+        midiFolder.listFiles { f -> f.isFile && SongFiles.isPlayable(f.name) }
             ?.map { it.name }?.sorted() ?: emptyList()
 
     private fun resolvePlayers(ctx: CommandContext<CommandSourceStack>, name: String): Set<UUID> {

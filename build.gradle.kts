@@ -12,6 +12,7 @@ repositories {
 dependencies {
     compileOnly("io.papermc.paper:paper-api:26.2.build.+")
     implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8")
+    implementation("org.audiveris:proxymusic:4.0.3")
 }
 
 kotlin {
@@ -38,3 +39,4 @@ tasks {
         }
     }
 }
+

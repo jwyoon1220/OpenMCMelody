@@ -1,6 +1,7 @@
 package io.github.jwyoon1220.openMCMelody.jukebox
 
 import io.github.jwyoon1220.openMCMelody.Permissions
+import io.github.jwyoon1220.openMCMelody.midi.SongFiles
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
 import org.bukkit.Bukkit
@@ -137,7 +138,7 @@ class JukeboxListener(
         stopItem.itemMeta = stopItem.itemMeta?.also { it.displayName(Component.text("정지", NamedTextColor.RED)) }
         inventory.setItem(STOP_SLOT, stopItem)
 
-        val songs = midiFolder.listFiles { f -> f.isFile && f.name.endsWith(".mid", ignoreCase = true) }
+        val songs = midiFolder.listFiles { f -> f.isFile && SongFiles.isPlayable(f.name) }
             ?.map { it.name }?.sorted() ?: emptyList()
         val capacity = MENU_SIZE - 1
         for ((i, name) in songs.take(capacity).withIndex()) {

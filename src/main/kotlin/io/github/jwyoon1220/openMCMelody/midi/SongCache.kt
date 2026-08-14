@@ -29,7 +29,9 @@ class SongCache(plugin: Plugin) {
     fun get(file: File): CompletableFuture<ParsedSong> {
         val key = "${file.name}:${file.lastModified()}"
         val future = cache.computeIfAbsent(key) {
-            CompletableFuture.supplyAsync({ MidiParser.parse(file) }, asyncExecutor)
+            CompletableFuture.supplyAsync({
+                if (SongFiles.isMusicXml(file.name)) MusicXmlParser.parse(file) else MidiParser.parse(file)
+            }, asyncExecutor)
         }
         // A failed parse (bad file, transient IO error) shouldn't be pinned forever - let a later retry re-parse.
         future.whenComplete { _, throwable -> if (throwable != null) cache.remove(key, future) }

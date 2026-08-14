@@ -4,6 +4,7 @@ import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
 import io.github.jwyoon1220.openMCMelody.Permissions
 import io.github.jwyoon1220.openMCMelody.midi.SongCache
+import io.github.jwyoon1220.openMCMelody.midi.SongFiles
 import io.github.jwyoon1220.openMCMelody.playback.PlaybackManager
 import io.github.jwyoon1220.openMCMelody.playback.SessionMode
 import io.github.jwyoon1220.openMCMelody.playlist.PlaylistManager
@@ -332,7 +333,7 @@ class WebServer(
     // ---- helpers ----
 
     private fun listMidiFiles(): List<String> =
-        midiFolder.listFiles { f -> f.isFile && f.name.endsWith(".mid", ignoreCase = true) }
+        midiFolder.listFiles { f -> f.isFile && SongFiles.isPlayable(f.name) }
             ?.map { it.name }?.sorted() ?: emptyList()
 
     private fun resolveTargets(body: Map<*, *>, session: WebAuthManager.Session): Set<UUID> =
