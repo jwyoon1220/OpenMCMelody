@@ -25,6 +25,13 @@ object ResourcePackBuilder {
                 file.inputStream().use { it.copyTo(zip) }
                 zip.closeEntry()
             }
+            for ((slot, checkpoints) in definition.releaseSlotFiles) {
+                for (checkpoint in checkpoints) {
+                    zip.putNextEntry(ZipEntry("assets/openmcmelody/sounds/${releaseSoundKey(slot.key, checkpoint.holdMillis)}.ogg"))
+                    checkpoint.file.inputStream().use { it.copyTo(zip) }
+                    zip.closeEntry()
+                }
+            }
         }
         val bytes = buffer.toByteArray()
         val sha1 = MessageDigest.getInstance("SHA-1").digest(bytes)
@@ -46,8 +53,14 @@ object ResourcePackBuilder {
     // to point at assets/openmcmelody/sounds/<slot>.ogg (where build() above places the file).
     private fun soundsJson(definition: SoundPackDefinition): String =
         Json.stringify(
-            definition.slotFiles.keys.associate { slot ->
-                slot.key to mapOf("sounds" to listOf(mapOf("name" to "openmcmelody:${slot.key}", "stream" to false)))
-            },
+            definition.slotFiles.keys.associate { slot -> slot.key to soundEvent(slot.key) } +
+                definition.releaseSlotFiles.entries.flatMap { (slot, checkpoints) ->
+                    checkpoints.map { checkpoint -> releaseSoundKey(slot.key, checkpoint.holdMillis) }
+                }.associateWith { key -> soundEvent(key) },
         )
+
+    private fun soundEvent(key: String) = mapOf("sounds" to listOf(mapOf("name" to "openmcmelody:$key", "stream" to false)))
+
+    /** Sound key convention for one release checkpoint - shared with [SoundPackManager]'s resolver. */
+    fun releaseSoundKey(slotKey: String, holdMillis: Long) = "${slotKey}_release_$holdMillis"
 }

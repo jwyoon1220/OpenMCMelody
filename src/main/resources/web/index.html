@@ -1,9 +1,17 @@
 <!doctype html>
-<html lang="en" class="light">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>OpenMCMelody</title>
+<script>
+  // Runs before Tailwind/CSS load so there's no flash of the wrong theme.
+  (function () {
+    var saved = localStorage.getItem('omm_theme');
+    var dark = saved ? saved === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
+    document.documentElement.classList.toggle('dark', dark);
+  })();
+</script>
 <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
@@ -13,53 +21,53 @@
     theme: {
       extend: {
         colors: {
-          "error": "#ba1a1a",
-          "tertiary-container": "#008673",
-          "surface-bright": "#f8f9fa",
-          "on-primary-fixed-variant": "#004493",
-          "tertiary": "#006a5b",
-          "surface-container-lowest": "#ffffff",
-          "secondary-container": "#7c4dff",
-          "on-background": "#191c1d",
-          "surface-container-high": "#e7e8e9",
-          "on-secondary-container": "#fcf6ff",
-          "on-secondary-fixed-variant": "#4f00d0",
-          "primary-container": "#1a73e8",
-          "secondary-fixed-dim": "#cdbdff",
-          "secondary": "#632ce5",
-          "inverse-surface": "#2e3132",
-          "tertiary-fixed": "#68fadd",
-          "on-tertiary": "#ffffff",
-          "outline-variant": "#c1c6d6",
-          "inverse-primary": "#adc7ff",
-          "on-secondary-fixed": "#20005f",
-          "on-tertiary-fixed": "#00201a",
-          "on-error-container": "#93000a",
-          "tertiary-fixed-dim": "#44ddc1",
-          "on-surface": "#191c1d",
-          "on-tertiary-fixed-variant": "#005145",
-          "surface-tint": "#005bc0",
-          "secondary-fixed": "#e8deff",
-          "background": "#f8f9fa",
-          "on-tertiary-container": "#ffffff",
-          "on-primary-fixed": "#001a41",
-          "surface-container": "#edeeef",
-          "on-error": "#ffffff",
-          "on-primary-container": "#ffffff",
-          "surface": "#f8f9fa",
-          "surface-container-low": "#f3f4f5",
-          "on-surface-variant": "#414754",
-          "surface-dim": "#d9dadb",
-          "on-primary": "#ffffff",
-          "surface-variant": "#e1e3e4",
-          "surface-container-highest": "#e1e3e4",
-          "error-container": "#ffdad6",
-          "primary": "#005bbf",
-          "outline": "#727785",
-          "primary-fixed-dim": "#adc7ff",
-          "inverse-on-surface": "#f0f1f2",
-          "primary-fixed": "#d8e2ff",
-          "on-secondary": "#ffffff"
+          "error": "var(--color-error)",
+          "tertiary-container": "var(--color-tertiary-container)",
+          "surface-bright": "var(--color-surface-bright)",
+          "on-primary-fixed-variant": "var(--color-on-primary-fixed-variant)",
+          "tertiary": "var(--color-tertiary)",
+          "surface-container-lowest": "var(--color-surface-container-lowest)",
+          "secondary-container": "var(--color-secondary-container)",
+          "on-background": "var(--color-on-background)",
+          "surface-container-high": "var(--color-surface-container-high)",
+          "on-secondary-container": "var(--color-on-secondary-container)",
+          "on-secondary-fixed-variant": "var(--color-on-secondary-fixed-variant)",
+          "primary-container": "var(--color-primary-container)",
+          "secondary-fixed-dim": "var(--color-secondary-fixed-dim)",
+          "secondary": "var(--color-secondary)",
+          "inverse-surface": "var(--color-inverse-surface)",
+          "tertiary-fixed": "var(--color-tertiary-fixed)",
+          "on-tertiary": "var(--color-on-tertiary)",
+          "outline-variant": "var(--color-outline-variant)",
+          "inverse-primary": "var(--color-inverse-primary)",
+          "on-secondary-fixed": "var(--color-on-secondary-fixed)",
+          "on-tertiary-fixed": "var(--color-on-tertiary-fixed)",
+          "on-error-container": "var(--color-on-error-container)",
+          "tertiary-fixed-dim": "var(--color-tertiary-fixed-dim)",
+          "on-surface": "var(--color-on-surface)",
+          "on-tertiary-fixed-variant": "var(--color-on-tertiary-fixed-variant)",
+          "surface-tint": "var(--color-surface-tint)",
+          "secondary-fixed": "var(--color-secondary-fixed)",
+          "background": "var(--color-background)",
+          "on-tertiary-container": "var(--color-on-tertiary-container)",
+          "on-primary-fixed": "var(--color-on-primary-fixed)",
+          "surface-container": "var(--color-surface-container)",
+          "on-error": "var(--color-on-error)",
+          "on-primary-container": "var(--color-on-primary-container)",
+          "surface": "var(--color-surface)",
+          "surface-container-low": "var(--color-surface-container-low)",
+          "on-surface-variant": "var(--color-on-surface-variant)",
+          "surface-dim": "var(--color-surface-dim)",
+          "on-primary": "var(--color-on-primary)",
+          "surface-variant": "var(--color-surface-variant)",
+          "surface-container-highest": "var(--color-surface-container-highest)",
+          "error-container": "var(--color-error-container)",
+          "primary": "var(--color-primary)",
+          "outline": "var(--color-outline)",
+          "primary-fixed-dim": "var(--color-primary-fixed-dim)",
+          "inverse-on-surface": "var(--color-inverse-on-surface)",
+          "primary-fixed": "var(--color-primary-fixed)",
+          "on-secondary": "var(--color-on-secondary)"
         },
         borderRadius: { DEFAULT: "0.25rem", lg: "0.5rem", xl: "0.75rem", full: "9999px" },
         spacing: {
@@ -89,16 +97,128 @@
   };
 </script>
 <style>
+  /*
+   * Light values on :root, dark overrides on .dark - Tailwind's color config above reads these
+   * through var(--color-*) so every bg-*/text-*/border-* utility repaints on the .dark class
+   * toggle without needing dark: variants sprinkled through every element. Most of the dark set
+   * reuses this palette's own M3 "fixed"/"inverse" tokens (already theme-invariant tones meant for
+   * exactly this - see e.g. inverse-primary), rather than being independently picked.
+   */
+  :root {
+    --color-error: #ba1a1a;
+    --color-tertiary-container: #008673;
+    --color-surface-bright: #f8f9fa;
+    --color-on-primary-fixed-variant: #004493;
+    --color-tertiary: #006a5b;
+    --color-surface-container-lowest: #ffffff;
+    --color-secondary-container: #7c4dff;
+    --color-on-background: #191c1d;
+    --color-surface-container-high: #e7e8e9;
+    --color-on-secondary-container: #fcf6ff;
+    --color-on-secondary-fixed-variant: #4f00d0;
+    --color-primary-container: #1a73e8;
+    --color-secondary-fixed-dim: #cdbdff;
+    --color-secondary: #632ce5;
+    --color-inverse-surface: #2e3132;
+    --color-tertiary-fixed: #68fadd;
+    --color-on-tertiary: #ffffff;
+    --color-outline-variant: #c1c6d6;
+    --color-inverse-primary: #adc7ff;
+    --color-on-secondary-fixed: #20005f;
+    --color-on-tertiary-fixed: #00201a;
+    --color-on-error-container: #93000a;
+    --color-tertiary-fixed-dim: #44ddc1;
+    --color-on-surface: #191c1d;
+    --color-on-tertiary-fixed-variant: #005145;
+    --color-surface-tint: #005bc0;
+    --color-secondary-fixed: #e8deff;
+    --color-background: #f8f9fa;
+    --color-on-tertiary-container: #ffffff;
+    --color-on-primary-fixed: #001a41;
+    --color-surface-container: #edeeef;
+    --color-on-error: #ffffff;
+    --color-on-primary-container: #ffffff;
+    --color-surface: #f8f9fa;
+    --color-surface-container-low: #f3f4f5;
+    --color-on-surface-variant: #414754;
+    --color-surface-dim: #d9dadb;
+    --color-on-primary: #ffffff;
+    --color-surface-variant: #e1e3e4;
+    --color-surface-container-highest: #e1e3e4;
+    --color-error-container: #ffdad6;
+    --color-primary: #005bbf;
+    --color-outline: #727785;
+    --color-primary-fixed-dim: #adc7ff;
+    --color-inverse-on-surface: #f0f1f2;
+    --color-primary-fixed: #d8e2ff;
+    --color-on-secondary: #ffffff;
+    --glow-highlight: rgba(255, 255, 255, 0.8);
+    --scrollbar-thumb: #e1e3e4;
+    --scrollbar-thumb-hover: #c1c6d6;
+  }
+  .dark {
+    --color-error: #ffb4ab;
+    --color-tertiary-container: #005145;
+    --color-surface-bright: #363a3d;
+    --color-on-primary-fixed-variant: #004493;
+    --color-tertiary: #44ddc1;
+    --color-surface-container-lowest: #0b0e11;
+    --color-secondary-container: #4f00d0;
+    --color-on-background: #e2e2e9;
+    --color-surface-container-high: #262a2e;
+    --color-on-secondary-container: #e8deff;
+    --color-on-secondary-fixed-variant: #4f00d0;
+    --color-primary-container: #00429b;
+    --color-secondary-fixed-dim: #cdbdff;
+    --color-secondary: #cdbdff;
+    --color-inverse-surface: #e2e2e9;
+    --color-tertiary-fixed: #68fadd;
+    --color-on-tertiary: #003730;
+    --color-outline-variant: #43474e;
+    --color-inverse-primary: #005bbf;
+    --color-on-secondary-fixed: #20005f;
+    --color-on-tertiary-fixed: #00201a;
+    --color-on-error-container: #ffdad6;
+    --color-tertiary-fixed-dim: #44ddc1;
+    --color-on-surface: #e2e2e9;
+    --color-on-tertiary-fixed-variant: #005145;
+    --color-surface-tint: #adc7ff;
+    --color-secondary-fixed: #e8deff;
+    --color-background: #101418;
+    --color-on-tertiary-container: #68fadd;
+    --color-on-primary-fixed: #001a41;
+    --color-surface-container: #1c2024;
+    --color-on-error: #690005;
+    --color-on-primary-container: #d8e2ff;
+    --color-surface: #101418;
+    --color-surface-container-low: #181c20;
+    --color-on-surface-variant: #c4c6d0;
+    --color-surface-dim: #101418;
+    --color-on-primary: #002e69;
+    --color-surface-variant: #43474e;
+    --color-surface-container-highest: #313539;
+    --color-error-container: #93000a;
+    --color-primary: #adc7ff;
+    --color-outline: #8d9199;
+    --color-primary-fixed-dim: #adc7ff;
+    --color-inverse-on-surface: #2e3132;
+    --color-primary-fixed: #d8e2ff;
+    --color-on-secondary: #20005f;
+    --glow-highlight: rgba(255, 255, 255, 0.06);
+    --scrollbar-thumb: #313539;
+    --scrollbar-thumb-hover: #43474e;
+  }
   body { font-family: 'Inter', sans-serif; }
   h1, h2, h3, h4, h5, h6 { font-family: 'Plus Jakarta Sans', sans-serif; }
-  .hero-gradient { background: linear-gradient(135deg, #e8deff 0%, #d8e2ff 100%); }
-  .card-inner-glow { box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8); }
+  .hero-gradient { background: linear-gradient(135deg, var(--color-secondary-fixed) 0%, var(--color-primary-fixed) 100%); }
+  .card-inner-glow { box-shadow: inset 0 1px 0 var(--glow-highlight); }
   ::-webkit-scrollbar { width: 6px; height: 6px; }
   ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: #e1e3e4; border-radius: 10px; }
-  ::-webkit-scrollbar-thumb:hover { background: #c1c6d6; }
+  ::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 10px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); }
   .btn-pill { display: inline-flex; align-items: center; gap: 6px; }
   .btn-pill:disabled { opacity: 0.4; cursor: not-allowed; }
+  .seek-track { cursor: pointer; }
 </style>
 </head>
 <body class="bg-background text-on-background">
@@ -145,6 +265,9 @@
     </div>
     <div class="flex items-center gap-3">
       <span class="font-label-md text-label-md text-on-surface-variant truncate max-w-[100px]" id="who-name-mobile"></span>
+      <button id="theme-toggle-mobile" class="w-9 h-9 rounded-full bg-surface-container flex items-center justify-center text-on-surface-variant hover:text-on-surface transition-colors shrink-0">
+        <span class="material-symbols-outlined text-[20px]" id="theme-toggle-icon-mobile">dark_mode</span>
+      </button>
       <button id="logout-btn-mobile" class="w-9 h-9 rounded-full bg-surface-container flex items-center justify-center text-on-surface-variant hover:text-error transition-colors shrink-0">
         <span class="material-symbols-outlined text-[20px]">logout</span>
       </button>
@@ -190,6 +313,10 @@
           <span class="font-label-md text-label-md text-secondary" id="who-admin" style="display:none;">ADMIN</span>
         </div>
       </div>
+      <button id="theme-toggle" class="w-full py-2 rounded-full bg-surface-container-high text-on-surface font-label-md text-label-md font-bold hover:bg-surface-variant transition-colors flex items-center justify-center gap-2">
+        <span class="material-symbols-outlined text-[18px]" id="theme-toggle-icon">dark_mode</span>
+        <span id="theme-toggle-label">Dark mode</span>
+      </button>
       <button id="logout-btn" class="w-full py-2 rounded-full bg-surface-container-high text-on-surface font-label-md text-label-md font-bold hover:bg-surface-variant transition-colors">Log out</button>
     </div>
   </nav>
@@ -276,8 +403,14 @@
   </div>
   <div class="flex flex-col items-center justify-center flex-1 max-w-xl gap-1 md:gap-2">
     <div class="flex items-center gap-4">
+      <button id="player-bar-seek-back" class="hidden w-8 h-8 md:w-9 md:h-9 rounded-full bg-surface-container text-on-surface-variant items-center justify-center hover:bg-surface-variant transition-colors">
+        <span class="material-symbols-outlined text-[18px]">replay_10</span>
+      </button>
       <button id="player-bar-toggle" class="hidden w-9 h-9 md:w-10 md:h-10 rounded-full bg-primary text-on-primary items-center justify-center hover:scale-105 active:scale-95 transition-transform shadow-md">
         <span class="material-symbols-outlined text-[22px]" id="player-bar-toggle-icon" style="font-variation-settings: 'FILL' 1;">pause</span>
+      </button>
+      <button id="player-bar-seek-fwd" class="hidden w-8 h-8 md:w-9 md:h-9 rounded-full bg-surface-container text-on-surface-variant items-center justify-center hover:bg-surface-variant transition-colors">
+        <span class="material-symbols-outlined text-[18px]">forward_10</span>
       </button>
       <button id="player-bar-stop" class="hidden w-9 h-9 rounded-full bg-surface-container text-error items-center justify-center hover:bg-error/10 transition-colors">
         <span class="material-symbols-outlined text-[20px]">stop</span>
@@ -285,7 +418,7 @@
     </div>
     <div class="hidden md:flex items-center gap-3 w-full">
       <span class="font-label-md text-label-md text-on-surface-variant w-9 text-right" id="player-bar-elapsed">0:00</span>
-      <div class="flex-1 h-1.5 bg-outline-variant/30 rounded-full overflow-hidden">
+      <div class="flex-1 h-1.5 bg-outline-variant/30 rounded-full overflow-hidden seek-track" id="player-bar-progress-track">
         <div class="h-full bg-primary rounded-full transition-[width]" id="player-bar-progress-fill" style="width:0%"></div>
       </div>
       <span class="font-label-md text-label-md text-on-surface-variant w-9" id="player-bar-total">0:00</span>
@@ -302,6 +435,7 @@ let playlists = [];
 let searchQuery = '';
 let loginPollTimer = null;
 let dashPollTimer = null;
+let lastSelfStatus = null;
 
 async function api(path, opts) {
   const res = await fetch(path, Object.assign({ credentials: 'same-origin', headers: { 'Content-Type': 'application/json' } }, opts));
@@ -358,6 +492,23 @@ async function doLogout() {
 $('logout-btn').addEventListener('click', doLogout);
 $('logout-btn-mobile').addEventListener('click', doLogout);
 
+// ---- theme ----
+
+function applyTheme(dark) {
+  document.documentElement.classList.toggle('dark', dark);
+  $('theme-toggle-icon').textContent = dark ? 'light_mode' : 'dark_mode';
+  $('theme-toggle-icon-mobile').textContent = dark ? 'light_mode' : 'dark_mode';
+  $('theme-toggle-label').textContent = dark ? 'Light mode' : 'Dark mode';
+}
+function toggleTheme() {
+  const dark = !document.documentElement.classList.contains('dark');
+  localStorage.setItem('omm_theme', dark ? 'dark' : 'light');
+  applyTheme(dark);
+}
+applyTheme(document.documentElement.classList.contains('dark'));
+$('theme-toggle').addEventListener('click', toggleTheme);
+$('theme-toggle-mobile').addEventListener('click', toggleTheme);
+
 // ---- section-jump nav ----
 
 document.querySelectorAll('[data-scroll]').forEach((el) => {
@@ -412,6 +563,7 @@ async function refreshAll() {
     renderPlayers(playersRes, statuses);
     renderSongs();
     renderPlaylists();
+    lastSelfStatus = myStatus;
     renderPlayerBar(myStatus);
     $('online-count').textContent = playersRes.length;
     $('stat-players').textContent = playersRes.length;
@@ -450,13 +602,18 @@ function renderPlayers(players, statuses) {
       const pct = st.totalTicks > 0 ? Math.min(100, Math.round((st.elapsedTicks / st.totalTicks) * 100)) : 0;
       const label = st.mode === 'PLAYLIST' ? ('playlist "' + esc(st.playlistName) + '" (' + st.playlistIndex + '/' + st.playlistSize + ') - ' + esc(st.song)) : esc(st.song);
       const stateSuffix = st.state === 'PAUSED' ? ' (paused)' : st.state === 'LOADING' ? ' (loading)' : '';
+      const trackClasses = 'h-1.5 bg-outline-variant/30 rounded-full overflow-hidden mt-1.5' + (control ? ' seek-track' : '');
       metaHtml = '<p class="font-body-sm text-body-sm text-on-surface-variant truncate">' + label + stateSuffix + ' - ' + fmtTime(st.elapsedTicks) + '/' + fmtTime(st.totalTicks) + '</p>' +
-        '<div class="h-1.5 bg-outline-variant/30 rounded-full overflow-hidden mt-1.5"><div class="h-full bg-primary rounded-full" style="width:' + pct + '%"></div></div>';
+        '<div class="' + trackClasses + '" data-seek-uuid="' + p.uuid + '" data-total="' + st.totalTicks + '"><div class="h-full bg-primary rounded-full" style="width:' + pct + '%"></div></div>';
     } else {
       metaHtml = '<p class="font-body-sm text-body-sm text-on-surface-variant truncate">Not listening to anything.</p>';
     }
     const pauseResumeBtn = st.playing
       ? '<button class="' + BTN + '" data-act="' + (st.state === 'PAUSED' ? 'resume' : 'pause') + '" data-uuid="' + p.uuid + '" ' + (control ? '' : 'disabled') + '><span class="material-symbols-outlined text-[16px]">' + (st.state === 'PAUSED' ? 'play_arrow' : 'pause') + '</span>' + (st.state === 'PAUSED' ? 'Resume' : 'Pause') + '</button>'
+      : '';
+    const seekBtns = (st.playing && control)
+      ? '<button class="' + BTN + '" data-act="seekback" data-uuid="' + p.uuid + '"><span class="material-symbols-outlined text-[16px]">replay_10</span></button>' +
+        '<button class="' + BTN + '" data-act="seekfwd" data-uuid="' + p.uuid + '"><span class="material-symbols-outlined text-[16px]">forward_10</span></button>'
       : '';
     const stopBtn = me.isAdmin ? '<button class="' + BTN_DANGER + '" data-act="stop" data-uuid="' + p.uuid + '"><span class="material-symbols-outlined text-[16px]">stop</span>Stop</button>' : '';
     const playSongForm = me.isAdmin
@@ -471,12 +628,28 @@ function renderPlayers(players, statuses) {
         '<div class="flex-1 min-w-0"><p class="font-body-md text-body-md font-bold text-on-surface truncate">' + esc(p.name) + '</p></div>' +
       '</div>' +
       '<div class="pl-[52px]">' + metaHtml + '</div>' +
-      '<div class="flex flex-wrap gap-2 mt-3 pl-[52px]">' + pauseResumeBtn + stopBtn + '</div>' +
+      '<div class="flex flex-wrap gap-2 mt-3 pl-[52px]">' + pauseResumeBtn + seekBtns + stopBtn + '</div>' +
       '<div class="pl-[52px]">' + playSongForm + playPlaylistForm + '</div>' +
     '</div>';
   }).join('');
 
   box.querySelectorAll('button[data-act]').forEach((btn) => btn.addEventListener('click', onPlayerAction));
+  box.querySelectorAll('[data-seek-uuid]').forEach((el) => el.addEventListener('click', onProgressSeek));
+}
+
+async function onProgressSeek(ev) {
+  const el = ev.currentTarget;
+  const uuid = el.dataset.seekUuid;
+  const total = parseInt(el.dataset.total, 10);
+  if (!total) return;
+  const rect = el.getBoundingClientRect();
+  const pct = Math.min(1, Math.max(0, (ev.clientX - rect.left) / rect.width));
+  try {
+    await post('/api/seek', { targets: [uuid], ticks: Math.round(pct * total) });
+    await refreshAll();
+  } catch (e) {
+    alert(e.message);
+  }
 }
 
 async function onPlayerAction(ev) {
@@ -488,7 +661,13 @@ async function onPlayerAction(ev) {
     if (act === 'pause') await post('/api/pause', { targets: [uuid] });
     else if (act === 'resume') await post('/api/resume', { targets: [uuid] });
     else if (act === 'stop') await post('/api/stop', { targets: [uuid] });
-    else if (act === 'playsong') {
+    else if (act === 'seekback' || act === 'seekfwd') {
+      const st = await get('/api/status?target=' + uuid);
+      if (st.playing) {
+        const ticks = Math.max(0, st.elapsedTicks + (act === 'seekback' ? -10 : 10) * 20);
+        await post('/api/seek', { targets: [uuid], ticks });
+      }
+    } else if (act === 'playsong') {
       const sel = document.querySelector('select[data-song-target="' + uuid + '"]');
       if (sel && sel.value) await post('/api/play', { filename: sel.value, targets: [uuid] });
     } else if (act === 'playplaylist') {
@@ -610,6 +789,8 @@ $('create-playlist-btn').addEventListener('click', async () => {
 function renderPlayerBar(status) {
   const toggleBtn = $('player-bar-toggle');
   const stopBtn = $('player-bar-stop');
+  const seekBackBtn = $('player-bar-seek-back');
+  const seekFwdBtn = $('player-bar-seek-fwd');
   if (!status.playing) {
     $('player-bar-title').textContent = 'Not listening to anything';
     $('player-bar-subtitle').textContent = '';
@@ -618,6 +799,8 @@ function renderPlayerBar(status) {
     $('player-bar-progress-fill').style.width = '0%';
     toggleBtn.classList.add('hidden'); toggleBtn.classList.remove('flex');
     stopBtn.classList.add('hidden'); stopBtn.classList.remove('flex');
+    seekBackBtn.classList.add('hidden'); seekBackBtn.classList.remove('flex');
+    seekFwdBtn.classList.add('hidden'); seekFwdBtn.classList.remove('flex');
     return;
   }
   const label = status.mode === 'PLAYLIST' ? ('Playlist "' + status.playlistName + '" (' + status.playlistIndex + '/' + status.playlistSize + ')') : 'Single song';
@@ -632,10 +815,35 @@ function renderPlayerBar(status) {
   toggleBtn.classList.remove('hidden'); toggleBtn.classList.add('flex');
   toggleBtn.dataset.act = status.state === 'PAUSED' ? 'resume' : 'pause';
   $('player-bar-toggle-icon').textContent = status.state === 'PAUSED' ? 'play_arrow' : 'pause';
+  seekBackBtn.classList.remove('hidden'); seekBackBtn.classList.add('flex');
+  seekFwdBtn.classList.remove('hidden'); seekFwdBtn.classList.add('flex');
 
   if (me.isAdmin) { stopBtn.classList.remove('hidden'); stopBtn.classList.add('flex'); }
   else { stopBtn.classList.add('hidden'); stopBtn.classList.remove('flex'); }
 }
+
+async function seekSelfBy(deltaSeconds) {
+  if (!lastSelfStatus || !lastSelfStatus.playing) return;
+  try {
+    await post('/api/seek', { targets: ['self'], ticks: Math.max(0, lastSelfStatus.elapsedTicks + deltaSeconds * 20) });
+    await refreshAll();
+  } catch (e) {
+    alert(e.message);
+  }
+}
+$('player-bar-seek-back').addEventListener('click', () => seekSelfBy(-10));
+$('player-bar-seek-fwd').addEventListener('click', () => seekSelfBy(10));
+$('player-bar-progress-track').addEventListener('click', async (ev) => {
+  if (!lastSelfStatus || !lastSelfStatus.playing || !lastSelfStatus.totalTicks) return;
+  const rect = ev.currentTarget.getBoundingClientRect();
+  const pct = Math.min(1, Math.max(0, (ev.clientX - rect.left) / rect.width));
+  try {
+    await post('/api/seek', { targets: ['self'], ticks: Math.round(pct * lastSelfStatus.totalTicks) });
+    await refreshAll();
+  } catch (e) {
+    alert(e.message);
+  }
+});
 
 $('player-bar-toggle').addEventListener('click', async (ev) => {
   const btn = ev.currentTarget;

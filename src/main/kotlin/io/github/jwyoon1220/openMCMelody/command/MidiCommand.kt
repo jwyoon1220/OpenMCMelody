@@ -131,6 +131,22 @@ class MidiCommand(
                     ),
             )
             .then(
+                Commands.literal("seek")
+                    .requires { it.sender.hasPermission(PERM_STATUS) }
+                    .then(
+                        Commands.argument("position", StringArgumentType.word())
+                            .executes { handleSeek(it, false) },
+                    )
+                    .then(
+                        Commands.argument("target", ArgumentTypes.players())
+                            .requires { it.sender.hasPermission(PERM_ADMIN) }
+                            .then(
+                                Commands.argument("position", StringArgumentType.word())
+                                    .executes { handleSeek(it, true) },
+                            ),
+                    ),
+            )
+            .then(
                 Commands.literal("mode")
                     .requires { it.sender.hasPermission(PERM_STATUS) }
                     .executes { handleShowMode(it) }
@@ -380,6 +396,40 @@ class MidiCommand(
         return "$verb playback for ${targets.size} target(s)." + if (extra > 0) " (affects $extra other listener(s) sharing the same session)" else ""
     }
 
+    // ---- seek ----
+
+    /**
+     * Position is seconds, either absolute ("90") or signed-relative ("+15"/"-30"). Relative offsets
+     * are resolved per-target (each may be at a different position, e.g. after a previous seek split
+     * them into separate sessions - see [PlaybackManager.seek]) rather than applying one shared delta.
+     */
+    private fun handleSeek(ctx: CommandContext<CommandSourceStack>, hasTargetArg: Boolean): Int {
+        val sender = ctx.source.sender
+        val targets = resolveTargetsOrSelf(ctx, "target", hasTargetArg, sender) ?: run {
+            sender.sendMessage("You must specify a target (console cannot target itself).")
+            return Command.SINGLE_SUCCESS
+        }
+        val positionArg = StringArgumentType.getString(ctx, "position")
+        val seconds = positionArg.toIntOrNull()
+        if (seconds == null) {
+            sender.sendMessage("Invalid position '$positionArg' - use an absolute number of seconds (e.g. 90) or a relative offset (e.g. +15, -30).")
+            return Command.SINGLE_SUCCESS
+        }
+
+        val affected = LinkedHashSet<PlaybackSession>()
+        if (positionArg.startsWith("+") || positionArg.startsWith("-")) {
+            for (uuid in targets) {
+                val current = playbackManager.statusFor(uuid) ?: continue
+                affected += playbackManager.seek(setOf(uuid), current.cursorTick + seconds * 20)
+            }
+        } else {
+            affected += playbackManager.seek(targets, seconds * 20)
+        }
+
+        sender.sendMessage(if (affected.isEmpty()) "Nothing is playing for that target." else "Seeked playback for ${targets.size} target(s).")
+        return Command.SINGLE_SUCCESS
+    }
+
     // ---- play mode ----
 
     private fun handleShowMode(ctx: CommandContext<CommandSourceStack>): Int {
@@ -622,7 +672,8 @@ class MidiCommand(
                 sender.sendMessage("Failed to convert '${sf2File.name}': ${throwable.message}")
             } else if (result != null) {
                 sender.sendMessage(
-                    "Built soundpack '$packName' from '${sf2File.name}': ${result.renderedSlots.size} instrument(s)" +
+                    "Built soundpack '$packName' from '${sf2File.name}': ${result.mainSlotCount} instrument(s)" +
+                        (if (result.releaseSlotCount > 0) " (${result.releaseSlotCount} with a release tail)" else "") +
                         (if (result.failedConversions > 0) ", ${result.failedConversions} failed to encode" else "") +
                         ". Run /midi soundpack build $packName to verify, then activate it.",
                 )

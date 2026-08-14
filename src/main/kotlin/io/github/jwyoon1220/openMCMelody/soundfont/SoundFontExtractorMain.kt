@@ -72,15 +72,17 @@ object SoundFontExtractorMain {
         var rendered = 0
         var failed = 0
         var processed = 0
-        val totalSlots = availablePrograms.size * GmNames.OCTAVE_COUNT + GmNames.PERCUSSION.size
+        val sustainingProgramCount = availablePrograms.count { GmNames.sustains(it) }
+        val totalSlots = availablePrograms.size * GmNames.OCTAVE_COUNT + GmNames.PERCUSSION.size +
+            sustainingProgramCount * GmNames.OCTAVE_COUNT * GmNames.RELEASE_HOLD_CHECKPOINTS_SECONDS.size
 
-        fun renderSlot(slot: String, percussion: Boolean, program: Int, note: Int) {
+        fun renderSlot(slot: String, percussion: Boolean, program: Int, note: Int, holdSeconds: Double, totalSeconds: Double) {
             processed++
             // Consumed by SoundFontConverter to drive an in-game progress bar - format is
             // load-bearing (tab-separated, parsed by prefix), not just a log line.
             println("PROGRESS\t$processed\t$totalSlots\t$slot")
             try {
-                renderOne(handle.synth, handle.stream, format, outputDir, slot, percussion, program, note)
+                renderOne(handle.synth, handle.stream, format, outputDir, slot, percussion, program, note, holdSeconds, totalSeconds)
                 manifest.append(slot).append('\t').append("$slot.wav").append('\n')
                 rendered++
             } catch (e: Exception) {
@@ -96,14 +98,32 @@ object SoundFontExtractorMain {
         // octave to cover its bucket, which matters across a full 88-key piano range.
         for (program in 0 until 128) {
             if (program !in availablePrograms) continue
+            val sustains = GmNames.sustains(program)
+            val holdSeconds = if (sustains) SUSTAINED_HOLD_SECONDS else MELODIC_HOLD_SECONDS
+            val totalSeconds = if (sustains) GmNames.SUSTAINED_SAMPLE_SECONDS else GmNames.MELODIC_SAMPLE_SECONDS
             for (octave in 0 until GmNames.OCTAVE_COUNT) {
                 val slot = GmNames.octaveSlotKey(GmNames.MELODIC[program], octave)
                 val centerNote = GmNames.octaveCenterNote(octave)
-                renderSlot(slot, percussion = false, program = program, note = centerNote)
+                renderSlot(slot, percussion = false, program = program, note = centerNote, holdSeconds = holdSeconds, totalSeconds = totalSeconds)
+                // Release-layer samples: same instrument's decay-after-note-off phase, captured at
+                // several hold-length checkpoints so playback can pick whichever one's hold length
+                // is closest to the real MIDI note's duration - see PlaybackManager.scheduleRelease
+                // and GmNames.RELEASE_*_SECONDS's doc comment for why this exists. The checkpoint's
+                // hold length in milliseconds is encoded directly in the slot key (parsed back out
+                // by SoundFontConverter.writePackYml) rather than needing a manifest format change.
+                if (sustains) {
+                    for (checkpointHoldSeconds in GmNames.RELEASE_HOLD_CHECKPOINTS_SECONDS) {
+                        val checkpointMillis = (checkpointHoldSeconds * 1000).toLong()
+                        renderSlot(
+                            "${slot}_release_$checkpointMillis", percussion = false, program = program, note = centerNote,
+                            holdSeconds = checkpointHoldSeconds, totalSeconds = checkpointHoldSeconds + GmNames.RELEASE_TAIL_SECONDS,
+                        )
+                    }
+                }
             }
         }
         for ((note, slot) in GmNames.PERCUSSION) {
-            renderSlot(slot, percussion = true, program = -1, note = note)
+            renderSlot(slot, percussion = true, program = -1, note = note, holdSeconds = PERCUSSION_HOLD_SECONDS, totalSeconds = GmNames.PERCUSSION_SAMPLE_SECONDS)
         }
 
         closeSynth(handle)
@@ -146,20 +166,12 @@ object SoundFontExtractorMain {
         percussion: Boolean,
         program: Int,
         note: Int,
+        holdSeconds: Double,
+        totalSeconds: Double,
     ) {
         val channel: MidiChannel = synth.channels[if (percussion) PERCUSSION_CHANNEL else 0]
         if (!percussion) channel.programChange(program)
 
-        val holdSeconds = when {
-            percussion -> PERCUSSION_HOLD_SECONDS
-            GmNames.sustains(program) -> SUSTAINED_HOLD_SECONDS
-            else -> MELODIC_HOLD_SECONDS
-        }
-        val totalSeconds = when {
-            percussion -> GmNames.PERCUSSION_SAMPLE_SECONDS
-            GmNames.sustains(program) -> GmNames.SUSTAINED_SAMPLE_SECONDS
-            else -> GmNames.MELODIC_SAMPLE_SECONDS
-        }
         val totalBytes = (format.frameSize * format.sampleRate * totalSeconds).toLong()
         val holdBytes = (format.frameSize * format.sampleRate * holdSeconds).toLong()
 

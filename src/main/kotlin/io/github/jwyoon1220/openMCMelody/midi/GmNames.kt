@@ -85,6 +85,23 @@ object GmNames {
     const val PERCUSSION_SAMPLE_SECONDS = 1.2
     const val SUSTAINED_SAMPLE_SECONDS = 5.5
 
+    // Release-layer samples: capture only the natural decay-after-note-off phase for
+    // SUSTAINING_PROGRAMS, played *alongside* the hard stopSound cutoff (see
+    // PlaybackManager.scheduleRelease) to mask its zero-fade artifact, since each is short and
+    // self-terminating so nothing ever needs to stopSound it. Multiple checkpoints (not just one)
+    // exist because many soundfont patches have an ADSR decay stage that keeps ramping toward the
+    // sustain level well past a fraction of a second - a release captured from a single short hold
+    // point audibly mismatches the amplitude/timbre of a note actually cut after it settled into
+    // sustain. PlaybackManager/SoundPackManager.resolveRelease picks whichever checkpoint's hold
+    // length is closest to the real MIDI note's duration, so the splice matches much more closely.
+    // Shared between SoundFontExtractorMain (how long to hold/capture each checkpoint) and
+    // SoundFontConverter (ffmpeg fade timing must line up with what was actually captured, and
+    // pack.yml must record each checkpoint's hold length for PlaybackManager to pick against) - the
+    // three must never drift apart, hence living here rather than duplicated per file.
+    val RELEASE_HOLD_CHECKPOINTS_SECONDS: List<Double> = listOf(0.15, 1.0, 2.5, 4.5)
+    const val RELEASE_TAIL_SECONDS = 1.35 // captured decay length after note-off, same for every checkpoint
+    const val RELEASE_FADE_SECONDS = 0.5
+
     // Each melodic instrument is split into per-octave sample slots (see InstrumentSlot's class
     // doc) - a 12-semitone bucket only ever needs to pitch-shift by at most half an octave,
     // unlike one sample stretched across the whole playable range (e.g. 88 piano keys).

@@ -184,3 +184,6 @@ fun Map<*, *>.jsonString(key: String): String? = this[key] as? String
 
 fun Map<*, *>.jsonStringList(key: String): List<String> =
     (this[key] as? List<*>)?.mapNotNull { it as? String } ?: emptyList()
+
+/** Parser.parseNumber always produces a [Double] - see [Json.Parser]. */
+fun Map<*, *>.jsonNumber(key: String): Double? = this[key] as? Double

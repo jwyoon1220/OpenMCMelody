@@ -18,6 +18,11 @@ class SoundPackManager(private val soundpacksFolder: File, private val stateFile
         // Precomputed once per build so the playback hot path never builds a "namespace:key" string per note.
         val customSoundKeys: Map<InstrumentSlot, String> =
             definition.slotFiles.keys.associateWith { "openmcmelody:${it.key}" }
+        // (holdMillis, sound key) per slot, sorted ascending - see resolveRelease's nearest-checkpoint pick.
+        val releaseSoundKeys: Map<InstrumentSlot, List<Pair<Long, String>>> =
+            definition.releaseSlotFiles.mapValues { (slot, checkpoints) ->
+                checkpoints.map { it.holdMillis to "openmcmelody:${ResourcePackBuilder.releaseSoundKey(slot.key, it.holdMillis)}" }
+            }
     }
 
     private val builds = ConcurrentHashMap<String, BuildResult>()
@@ -97,6 +102,18 @@ class SoundPackManager(private val soundpacksFolder: File, private val stateFile
 
     /** Resolves [slot] to a custom `openmcmelody:<slot>` sound key via the active pack, or null to fall back to vanilla. */
     fun resolve(slot: InstrumentSlot): String? = activeName?.let { builds[it]?.customSoundKeys?.get(slot) }
+
+    /**
+     * Resolves [slot]'s release-tail sound key whose checkpoint hold length is closest to
+     * [heldMillis] (see GmNames.RELEASE_HOLD_CHECKPOINTS_SECONDS) - null if the active pack has no
+     * release checkpoints for this slot. Picking the nearest rather than always the same one keeps
+     * the release's starting amplitude/timbre close to whatever the main sample's was at the actual
+     * moment of interruption, instead of the audible splice mismatch a single fixed checkpoint has.
+     */
+    fun resolveRelease(slot: InstrumentSlot, heldMillis: Long): String? {
+        val checkpoints = activeName?.let { builds[it]?.releaseSoundKeys?.get(slot) } ?: return null
+        return checkpoints.minByOrNull { (holdMillis, _) -> kotlin.math.abs(holdMillis - heldMillis) }?.second
+    }
 
     private fun resourcePackUrl(publicUrl: String, name: String) = "$publicUrl/resourcepack/$name.zip"
 }

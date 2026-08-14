@@ -60,6 +60,7 @@ class WebServer(
         server.createContext("/api/stop") { route(it, ::handleStop) }
         server.createContext("/api/pause") { route(it, ::handlePauseResume) }
         server.createContext("/api/resume") { route(it, ::handlePauseResume) }
+        server.createContext("/api/seek") { route(it, ::handleSeek) }
         // No session auth here - this is fetched by the Minecraft client itself, not a browser.
         server.createContext("/resourcepack") { route(it, ::handleResourcePack) }
 
@@ -310,6 +311,21 @@ class WebServer(
         val onlySelf = targets.size == 1 && targets.single() == session.playerId
         if (!onlySelf && !requireAdmin(exchange, session)) return
         val affected = MainThreadBridge.run(plugin) { if (pause) playbackManager.pause(targets) else playbackManager.resume(targets) }
+        respondJson(exchange, 200, mapOf("ok" to true, "affectedSessions" to affected.size))
+    }
+
+    // ---- seek (self open to all, others require admin - mirrors pause/resume) ----
+
+    private fun handleSeek(exchange: HttpExchange) {
+        if (exchange.requestMethod != "POST") return respondJson(exchange, 405, mapOf("error" to "Method not allowed"))
+        val session = requireSession(exchange) ?: return
+        val body = readJsonBody(exchange)
+        val targets = resolveTargets(body, session)
+        if (targets.isEmpty()) return respondJson(exchange, 400, mapOf("error" to "No valid targets"))
+        val onlySelf = targets.size == 1 && targets.single() == session.playerId
+        if (!onlySelf && !requireAdmin(exchange, session)) return
+        val ticks = body.jsonNumber("ticks")?.toInt() ?: return respondJson(exchange, 400, mapOf("error" to "Missing 'ticks'"))
+        val affected = MainThreadBridge.run(plugin) { playbackManager.seek(targets, ticks) }
         respondJson(exchange, 200, mapOf("ok" to true, "affectedSessions" to affected.size))
     }
 

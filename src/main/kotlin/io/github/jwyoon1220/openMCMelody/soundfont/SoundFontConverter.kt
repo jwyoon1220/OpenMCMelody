@@ -1,10 +1,15 @@
 package io.github.jwyoon1220.openMCMelody.soundfont
 
+import io.github.jwyoon1220.openMCMelody.midi.GmNames
 import org.bukkit.plugin.Plugin
 import java.io.File
 import java.io.IOException
 import java.nio.file.Files
 import java.util.concurrent.TimeUnit
+import javax.sound.sampled.AudioSystem
+
+/** Matches the "_release_<holdMillis>" suffix SoundFontExtractorMain encodes into a release-layer slot key. */
+private val RELEASE_CHECKPOINT_SUFFIX = Regex("_release_(\\d+)$")
 
 /** How much of the 0-100 progress range extraction consumes before ffmpeg encoding takes the rest. */
 private const val EXTRACTION_WEIGHT_PERCENT = 80
@@ -27,7 +32,10 @@ private const val EXTRACTION_WEIGHT_PERCENT = 80
 class SoundFontConverter(private val plugin: Plugin, private val ffmpegPath: String) {
 
     class ConversionException(message: String) : Exception(message)
-    class ConversionResult(val renderedSlots: List<String>, val failedConversions: Int)
+    class ConversionResult(val renderedSlots: List<String>, val failedConversions: Int) {
+        val mainSlotCount: Int get() = renderedSlots.count { !RELEASE_CHECKPOINT_SUFFIX.containsMatchIn(it) }
+        val releaseSlotCount: Int get() = renderedSlots.count { RELEASE_CHECKPOINT_SUFFIX.containsMatchIn(it) }
+    }
 
     /**
      * @param onProgress called (from whatever thread [convert] itself runs on - callers already
@@ -62,7 +70,7 @@ class SoundFontConverter(private val plugin: Plugin, private val ffmpegPath: Str
                 val (slot, wavName) = entry
                 val percent = EXTRACTION_WEIGHT_PERCENT + (index + 1) * (100 - EXTRACTION_WEIGHT_PERCENT) / entries.size
                 onProgress(percent, "Encoding $slot.ogg")
-                if (runFfmpeg(File(tempDir, wavName), File(packFolder, "$slot.ogg"))) renderedSlots += slot
+                if (runFfmpeg(File(tempDir, wavName), File(packFolder, "$slot.ogg"), fadeOut = RELEASE_CHECKPOINT_SUFFIX.containsMatchIn(slot))) renderedSlots += slot
             }
             if (renderedSlots.isEmpty()) {
                 throw ConversionException("ffmpeg failed to convert any samples - check 'soundfont.ffmpeg-path' in config.yml points at a working ffmpeg")
@@ -104,10 +112,10 @@ class SoundFontConverter(private val plugin: Plugin, private val ffmpegPath: Str
                 }
             }
         }
-        val finished = process.waitFor(120, TimeUnit.SECONDS)
+        val finished = process.waitFor(420, TimeUnit.SECONDS)
         if (!finished) {
             process.destroyForcibly()
-            throw ConversionException("Soundfont extraction timed out after 120s")
+            throw ConversionException("Soundfont extraction timed out after 420s")
         }
         if (process.exitValue() != 0) {
             throw ConversionException("Soundfont extraction failed (exit ${process.exitValue()}): ${output.take(500)}")
@@ -115,9 +123,22 @@ class SoundFontConverter(private val plugin: Plugin, private val ffmpegPath: Str
         plugin.logger.info("Soundfont extraction: ${output.trim()}")
     }
 
-    private fun runFfmpeg(wavFile: File, oggFile: File): Boolean {
+    private fun runFfmpeg(wavFile: File, oggFile: File, fadeOut: Boolean): Boolean {
+        val args = mutableListOf(ffmpegPath, "-y", "-i", wavFile.absolutePath)
+        if (fadeOut) {
+            // Guarantees a release sample always tapers to true silence by EOF regardless of what
+            // the raw synth capture happened to do - see GmNames.RELEASE_*_SECONDS's doc comment.
+            // Probed from the actual WAV rather than a shared constant since each checkpoint's
+            // total length differs (checkpointHoldSeconds + GmNames.RELEASE_TAIL_SECONDS).
+            val totalSeconds = probeWavSeconds(wavFile)
+            if (totalSeconds != null) {
+                val fadeStart = (totalSeconds - GmNames.RELEASE_FADE_SECONDS).coerceAtLeast(0.0)
+                args += listOf("-af", "afade=t=out:st=$fadeStart:d=${GmNames.RELEASE_FADE_SECONDS}")
+            }
+        }
+        args += listOf("-c:a", "libvorbis", "-q:a", "4", oggFile.absolutePath)
         val process = try {
-            ProcessBuilder(ffmpegPath, "-y", "-i", wavFile.absolutePath, "-c:a", "libvorbis", "-q:a", "4", oggFile.absolutePath)
+            ProcessBuilder(args)
                 .redirectErrorStream(true)
                 .start()
         } catch (e: IOException) {
@@ -132,6 +153,14 @@ class SoundFontConverter(private val plugin: Plugin, private val ffmpegPath: Str
     }
 
     private fun writePackYml(packFolder: File, packName: String, sourceName: String, slots: List<String>) {
+        val mainSlots = slots.filterNot { RELEASE_CHECKPOINT_SUFFIX.containsMatchIn(it) }
+        // (baseKey, holdMillis, slot) - one row per release checkpoint, grouped by baseKey below.
+        val releaseRows = slots.mapNotNull { slot ->
+            val match = RELEASE_CHECKPOINT_SUFFIX.find(slot) ?: return@mapNotNull null
+            val baseKey = slot.removeRange(match.range)
+            Triple(baseKey, match.groupValues[1], slot)
+        }
+
         val sb = StringBuilder()
         sb.append("name: ").append(yamlQuote(packName)).append('\n')
         sb.append("description: ").append(yamlQuote("Auto-generated from $sourceName")).append('\n')
@@ -139,8 +168,30 @@ class SoundFontConverter(private val plugin: Plugin, private val ffmpegPath: Str
         // original file without the caller having to re-specify it.
         sb.append("source-soundfont: ").append(yamlQuote(sourceName)).append('\n')
         sb.append("sounds:\n")
-        for (slot in slots) sb.append("  ").append(slot).append(": ").append(slot).append(".ogg\n")
+        for (slot in mainSlots) sb.append("  ").append(slot).append(": ").append(slot).append(".ogg\n")
+        // Optional, additive, nested section (see SoundPackLoader/GmNames.RELEASE_*_SECONDS) - one
+        // sub-map per base slot (base key has the "_release_<holdMillis>" suffix stripped so
+        // InstrumentSlot.byKey() resolves it), keyed by that checkpoint's hold length in
+        // milliseconds so PlaybackManager can pick whichever is closest to a note's real duration.
+        // Old loaders that don't know this section simply never read it.
+        if (releaseRows.isNotEmpty()) {
+            sb.append("release_sounds:\n")
+            for ((baseKey, rowsForKey) in releaseRows.groupBy({ it.first }, { it.second to it.third })) {
+                sb.append("  ").append(baseKey).append(":\n")
+                for ((holdMillis, slot) in rowsForKey) {
+                    sb.append("    '").append(holdMillis).append("': ").append(slot).append(".ogg\n")
+                }
+            }
+        }
         File(packFolder, "pack.yml").writeText(sb.toString())
+    }
+
+    private fun probeWavSeconds(wavFile: File): Double? = try {
+        val format = AudioSystem.getAudioFileFormat(wavFile)
+        val frames = format.frameLength.toDouble()
+        if (frames < 0) null else frames / format.format.frameRate
+    } catch (e: Exception) {
+        null
     }
 
     private fun yamlQuote(value: String): String = "'" + value.replace("'", "''") + "'"

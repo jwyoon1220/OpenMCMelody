@@ -8,6 +8,7 @@ import io.github.jwyoon1220.openMCMelody.midi.SongCache
 import io.github.jwyoon1220.openMCMelody.playlist.PlaylistManager
 import io.github.jwyoon1220.openMCMelody.soundpack.SoundPackManager
 import org.bukkit.Bukkit
+import org.bukkit.Location
 import org.bukkit.Sound
 import org.bukkit.SoundCategory
 import org.bukkit.entity.Player
@@ -129,7 +130,11 @@ class PlaybackManager(
         val affected = LinkedHashSet<PlaybackSession>()
         for (uuid in targets) {
             val session = sessionsByTarget[uuid] ?: continue
-            if (session.state == PlaybackState.PLAYING) session.state = PlaybackState.PAUSED
+            if (session.state == PlaybackState.PLAYING) {
+                // Freeze the instant-timing clock so it doesn't keep accruing real time while paused.
+                session.instantElapsedMicrosBase = instantElapsedMicros(session)
+                session.state = PlaybackState.PAUSED
+            }
             affected += session
         }
         return affected
@@ -139,13 +144,75 @@ class PlaybackManager(
         val affected = LinkedHashSet<PlaybackSession>()
         for (uuid in targets) {
             val session = sessionsByTarget[uuid] ?: continue
-            if (session.state == PlaybackState.PAUSED) session.state = PlaybackState.PLAYING
+            if (session.state == PlaybackState.PAUSED) {
+                session.instantAnchorNanos = System.nanoTime()
+                session.state = PlaybackState.PLAYING
+            }
             affected += session
         }
         return affected
     }
 
     fun statusFor(uuid: UUID): PlaybackSession? = sessionsByTarget[uuid]
+
+    /**
+     * Moves playback to [tick] (clamped to the song's length) for exactly [targets] - unlike
+     * [pause]/[resume] (whole-session operations, since a shared cursor can't pause for only one
+     * listener), seeking is meant to work per individual, so any requested target that doesn't
+     * cover its whole session's listener set gets split off into its own session first, leaving the
+     * rest of the group's position untouched.
+     */
+    fun seek(targets: Set<UUID>, tick: Int): Set<PlaybackSession> {
+        val bySession = LinkedHashMap<PlaybackSession, MutableSet<UUID>>()
+        for (uuid in targets) {
+            val session = sessionsByTarget[uuid] ?: continue
+            bySession.getOrPut(session) { LinkedHashSet() } += uuid
+        }
+        val affected = LinkedHashSet<PlaybackSession>()
+        for ((session, uuids) in bySession) {
+            val target = if (uuids.size == session.targets.size) session else splitOff(session, uuids)
+            applySeek(target, tick.coerceIn(0, target.song.totalTicks))
+            affected += target
+        }
+        return affected
+    }
+
+    /** Carves [uuids] out of [session] into a brand-new session at the same playback position, so seeking them doesn't move the listeners left behind. */
+    private fun splitOff(session: PlaybackSession, uuids: Set<UUID>): PlaybackSession {
+        session.targets.removeAll(uuids)
+        val newSession = PlaybackSession(UUID.randomUUID(), uuids.toMutableSet(), session.song, session.mode, session.playlistName, session.songIndex)
+        newSession.state = session.state
+        newSession.cursorTick = session.cursorTick
+        newSession.nextEventIndex = session.nextEventIndex
+        newSession.instantNextEventIndex = session.instantNextEventIndex
+        for (uuid in uuids) sessionsByTarget[uuid] = newSession
+        activeSessions += newSession
+        return newSession
+    }
+
+    private fun applySeek(session: PlaybackSession, tick: Int) {
+        session.cursorTick = tick
+        val idx = firstIndexAfterTick(session.song, tick)
+        session.nextEventIndex = idx
+        session.instantNextEventIndex = idx
+        session.instantElapsedMicrosBase = tick.toLong() * MC_TICK_MICROS
+        session.instantAnchorNanos = System.nanoTime()
+    }
+
+    /** First index in [song]'s tick-ordered arrays whose event fires after [tick] - i.e. everything up to and including [tick] is treated as already played. */
+    private fun firstIndexAfterTick(song: ParsedSong, tick: Int): Int {
+        var lo = 0
+        var hi = song.size
+        while (lo < hi) {
+            val mid = (lo + hi) ushr 1
+            if (song.tick[mid] <= tick) lo = mid + 1 else hi = mid
+        }
+        return lo
+    }
+
+    /** Real elapsed song-micros for [session]'s current song, per [PlaybackSession.instantAnchorNanos]. */
+    private fun instantElapsedMicros(session: PlaybackSession): Long =
+        session.instantElapsedMicrosBase + (System.nanoTime() - session.instantAnchorNanos) / 1000
 
     private fun tick() {
         val iterator = activeSessions.iterator()
@@ -167,15 +234,19 @@ class PlaybackManager(
             // Real-time sub-tick dispatch for PlayMode.INSTANT targets, driven by each note's true
             // unquantized onset (song.tickMicros) instead of the tick-locked/collision-spread
             // song.tick above - kept on its own cursor so it stays correct even if a listener
-            // switches modes mid-session. Cheap to always advance; only schedules when the window
-            // actually has something due, and only bothers snapshotting targets when it does.
-            val windowStartMicros = session.cursorTick.toLong() * MC_TICK_MICROS
-            val windowEndMicros = windowStartMicros + MC_TICK_MICROS
+            // switches modes mid-session. The window is anchored to actual elapsed wall-clock time
+            // (instantElapsedMicros), not cursorTick*MC_TICK_MICROS, so instant dispatch keeps pace
+            // with real time even when the server's actual tick rate falls below 20 TPS and this
+            // tick() method itself is being invoked less often than every 50ms - see
+            // PlaybackSession.instantAnchorNanos. Cheap to always advance; only schedules when the
+            // window actually has something due, and only bothers snapshotting targets when it does.
+            val nowMicros = instantElapsedMicros(session)
+            val windowEndMicros = nowMicros + MC_TICK_MICROS
             if (session.instantNextEventIndex < song.size && song.tickMicros[session.instantNextEventIndex] < windowEndMicros) {
                 val instantTargets = session.targets.filterTo(LinkedHashSet()) { playModeManager.modeOf(it) == PlayMode.INSTANT }
                 while (session.instantNextEventIndex < song.size && song.tickMicros[session.instantNextEventIndex] < windowEndMicros) {
                     val idx = session.instantNextEventIndex
-                    if (instantTargets.isNotEmpty()) scheduleInstantNote(instantTargets, song, idx, windowStartMicros)
+                    if (instantTargets.isNotEmpty()) scheduleInstantNote(instantTargets, song, idx, nowMicros)
                     session.instantNextEventIndex++
                 }
             }
@@ -246,18 +317,20 @@ class PlaybackManager(
     private fun playToTargets(targets: Set<UUID>, slot: InstrumentSlot, vanillaPitch: Float, customPitch: Float, volume: Float, durationMicros: Long) {
         // Resolved once per note (not per target) - the active soundpack can't change mid-flush.
         val customKey = soundPackManager.resolve(slot)
+        val releaseKey = customKey?.let { soundPackManager.resolveRelease(slot, durationMicros.coerceAtLeast(0) / 1000) }
         val voice = allocateVoice(customKey ?: slot.vanilla, slot, durationMicros)
-        val players = ArrayList<Player>(targets.size)
+        val locations = LinkedHashMap<Player, Location>(targets.size)
         for (uuid in targets) {
             val player = Bukkit.getPlayer(uuid) ?: continue
-            players += player
+            val location = player.location
+            locations[player] = location
             if (customKey != null) {
-                player.playSound(player.location, customKey, voice.category, volume, customPitch)
+                player.playSound(location, customKey, voice.category, volume, customPitch)
             } else {
-                player.playSound(player.location, slot.vanilla, voice.category, volume, vanillaPitch)
+                player.playSound(location, slot.vanilla, voice.category, volume, vanillaPitch)
             }
         }
-        if (players.isNotEmpty()) scheduleRelease(voice, 0, players, customKey, slot.vanilla)
+        if (locations.isNotEmpty()) scheduleRelease(voice, 0, locations, customKey, slot.vanilla, releaseKey, customPitch, volume)
     }
 
     /**
@@ -309,13 +382,34 @@ class PlaybackManager(
         return category
     }
 
-    /** Releases [voice]'s bookkeeping after [extraDelayMillis] + its own release delay, cutting the sound short only if it's still the current owner and actually needs one - see [allocateVoice]. */
-    private fun scheduleRelease(voice: Voice, extraDelayMillis: Long, players: List<Player>, customKey: String?, vanillaSound: Sound) {
+    /**
+     * Releases [voice]'s bookkeeping after [extraDelayMillis] + its own release delay, cutting the
+     * sound short only if it's still the current owner and actually needs one - see [allocateVoice].
+     * When [releaseKey] is available (the active soundpack has a release-tail sample for this slot,
+     * see [SoundPackManager.resolveRelease]/`GmNames.RELEASE_*_SECONDS`), a short decaying tail is
+     * triggered at the exact same instant as the hard `stopSound`, masking its zero-fade artifact -
+     * it's short and self-terminating so nothing ever needs to stop *it*, hence no voice/category
+     * bookkeeping for it (see [allocateVoice]'s doc for how voice identity works).
+     *
+     * Runs on [instantExecutor]'s dedicated thread, never the main thread - like
+     * [scheduleInstantNote], it only ever reads the pre-captured [locations] snapshot (built on the
+     * main thread by both call sites), never touches live [Player] state itself.
+     */
+    private fun scheduleRelease(
+        voice: Voice,
+        extraDelayMillis: Long,
+        locations: Map<Player, Location>,
+        customKey: String?,
+        vanillaSound: Sound,
+        releaseKey: String?,
+        releasePitch: Float,
+        releaseVolume: Float,
+    ) {
         val executor = instantExecutor ?: return
         val voiceKey = VoiceKey(voice.soundIdentity, voice.category)
         executor.schedule({
             if (voiceOwners.remove(voiceKey, voice.id) && voice.explicitStop) {
-                for (player in players) {
+                for ((player, location) in locations) {
                     if (!player.isOnline) continue
                     try {
                         if (customKey != null) {
@@ -325,6 +419,13 @@ class PlaybackManager(
                         }
                     } catch (_: Exception) {
                         // Best-effort, same reasoning as scheduleInstantNote's playSound try/catch.
+                    }
+                    if (releaseKey != null) {
+                        try {
+                            player.playSound(location, releaseKey, voice.category, releaseVolume, releasePitch)
+                        } catch (_: Exception) {
+                            // Best-effort, same reasoning as scheduleInstantNote's playSound try/catch.
+                        }
                     }
                 }
             }
@@ -344,7 +445,7 @@ class PlaybackManager(
      * server version could tighten that, hence the defensive try/catch: one dropped note should
      * never surface as an error, just a missed sound.
      */
-    private fun scheduleInstantNote(targets: Set<UUID>, song: ParsedSong, idx: Int, windowStartMicros: Long) {
+    private fun scheduleInstantNote(targets: Set<UUID>, song: ParsedSong, idx: Int, nowMicros: Long) {
         val executor = instantExecutor ?: return
         val players = targets.mapNotNull { Bukkit.getPlayer(it) }
         if (players.isEmpty()) return
@@ -355,8 +456,11 @@ class PlaybackManager(
         val customPitch = song.customPitch[idx]
         val volume = song.volume[idx]
         val durationMicros = song.durationMicros[idx]
+        val releaseKey = customKey?.let { soundPackManager.resolveRelease(slot, durationMicros.coerceAtLeast(0) / 1000) }
         val voice = allocateVoice(customKey ?: slot.vanilla, slot, durationMicros)
-        val delayMillis = (song.tickMicros[idx] - windowStartMicros).coerceAtLeast(0) / 1000
+        // Notes already due (song.tickMicros[idx] <= nowMicros, e.g. right after a lag spike) fire
+        // with ~0 delay instead of waiting for a false "next tick" - see instantElapsedMicros.
+        val delayMillis = (song.tickMicros[idx] - nowMicros).coerceAtLeast(0) / 1000
 
         executor.schedule({
             for (player in players) {
@@ -373,7 +477,7 @@ class PlaybackManager(
                 }
             }
         }, delayMillis, TimeUnit.MILLISECONDS)
-        scheduleRelease(voice, delayMillis, players, customKey, slot.vanilla)
+        scheduleRelease(voice, delayMillis, locations, customKey, slot.vanilla, releaseKey, customPitch, volume)
     }
 
     private fun prefetchNextSong(session: PlaybackSession) {
@@ -455,6 +559,8 @@ class PlaybackManager(
         session.cursorTick = 0
         session.nextEventIndex = 0
         session.instantNextEventIndex = 0
+        session.instantAnchorNanos = System.nanoTime()
+        session.instantElapsedMicrosBase = 0L
         session.prefetched = false
         session.state = PlaybackState.PLAYING
     }
