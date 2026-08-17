@@ -13,7 +13,7 @@ private const val BLOCKS_KEY = "blocks"
 private fun blockKey(block: Block): String = "${block.world.name};${block.x};${block.y};${block.z}"
 
 /**
- * Tracks which jukebox blocks have been converted into "special" (MIDI-playing) jukeboxes -
+ * Tracks which jukebox blocks have been converted into "special" (song-playing) jukeboxes -
  * persisted to `jukeboxes.yml` so the conversion survives a restart, same async-single-slot-write
  * pattern as [io.github.jwyoon1220.openMCMelody.playlist.PlaylistManager] so disk I/O never stalls
  * the main thread mutation that triggered it.

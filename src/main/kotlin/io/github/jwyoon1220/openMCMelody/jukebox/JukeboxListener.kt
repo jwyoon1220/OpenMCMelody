@@ -48,7 +48,7 @@ class JukeboxListener(
     plugin: Plugin,
     private val jukeboxManager: SpecialJukeboxManager,
     private val jukeboxPlaybackManager: JukeboxPlaybackManager,
-    private val midiFolder: File,
+    private val scoresFolder: File,
 ) : Listener {
 
     private val songKey = NamespacedKey(plugin, "jukebox-song")
@@ -73,7 +73,7 @@ class JukeboxListener(
         event.isCancelled = true
         if (player.gameMode != GameMode.CREATIVE) heldItem.amount -= 1
         jukeboxManager.markSpecial(block)
-        player.sendMessage(Component.text("이 주크박스가 MIDI 재생용으로 바뀌었습니다 - 다시 우클릭해서 곡을 고르세요.", NamedTextColor.GREEN))
+        player.sendMessage(Component.text("이 주크박스가 곡 재생용으로 바뀌었습니다 - 다시 우클릭해서 곡을 고르세요.", NamedTextColor.GREEN))
     }
 
     @EventHandler
@@ -106,7 +106,7 @@ class JukeboxListener(
 
         val clicked = event.currentItem ?: return
         val filename = clicked.itemMeta?.persistentDataContainer?.get(songKey, PersistentDataType.STRING) ?: return
-        val file = File(midiFolder, filename)
+        val file = File(scoresFolder, filename)
         if (!file.isFile) {
             player.sendMessage(Component.text("'$filename' 파일을 찾을 수 없습니다.", NamedTextColor.RED))
             return
@@ -130,7 +130,7 @@ class JukeboxListener(
     private fun openMenu(player: Player, block: Block) {
         val holder = JukeboxMenuHolder(block)
         val title = jukeboxPlaybackManager.currentSongName(block)?.let { Component.text(it, NamedTextColor.WHITE) }
-            ?: Component.text("주크박스 - MIDI 선택")
+            ?: Component.text("주크박스 - 곡 선택")
         val inventory = Bukkit.createInventory(holder, MENU_SIZE, title)
         holder.backing = inventory
 
@@ -138,7 +138,7 @@ class JukeboxListener(
         stopItem.itemMeta = stopItem.itemMeta?.also { it.displayName(Component.text("정지", NamedTextColor.RED)) }
         inventory.setItem(STOP_SLOT, stopItem)
 
-        val songs = midiFolder.listFiles { f -> f.isFile && SongFiles.isPlayable(f.name) }
+        val songs = scoresFolder.listFiles { f -> f.isFile && SongFiles.isPlayable(f.name) }
             ?.map { it.name }?.sorted() ?: emptyList()
         val capacity = MENU_SIZE - 1
         for ((i, name) in songs.take(capacity).withIndex()) {

@@ -6,15 +6,15 @@ api-version: '26.2'
 load: POSTWORLD
 
 permissions:
-  openmcmelody.midi.admin:
-    description: List, play and stop MIDI songs for any player, and check any player's status.
+  openmcmelody.score.admin:
+    description: List, play and stop songs for any player, and check any player's status.
     default: op
-  openmcmelody.midi.playlist:
-    description: Manage and play shared MIDI playlists.
+  openmcmelody.score.playlist:
+    description: Manage and play shared playlists.
     default: true
-  openmcmelody.midi.status:
-    description: Check your own current MIDI playback status.
+  openmcmelody.score.status:
+    description: Check your own current playback status.
     default: true
-  openmcmelody.midi.jukebox:
-    description: Convert jukeboxes into MIDI-playing jukeboxes and pick songs for them.
+  openmcmelody.score.jukebox:
+    description: Convert jukeboxes into song-playing jukeboxes and pick songs for them.
     default: true

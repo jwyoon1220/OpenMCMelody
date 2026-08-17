@@ -1,6 +1,6 @@
 # OpenMCMelody
 
-A Paper/Minecraft plugin that turns Standard MIDI Files into in-game note block music, playable to individual players or groups, with optional custom instrument sound packs and a browser-based control panel.
+A Paper/Minecraft plugin that turns MIDI and MusicXML files into in-game note block music, playable to individual players or groups, with optional custom instrument sound packs and a browser-based control panel.
 
 **Languages: [English](#english) | [한국어](#한국어)**
 
@@ -10,25 +10,27 @@ A Paper/Minecraft plugin that turns Standard MIDI Files into in-game note block 
 
 ### Features
 
-- Plays `.mid` files through Minecraft's note block sounds, per-target (a player, several players, or the whole server).
+- Plays `.mid`/`.midi` and `.musicxml`/`.mxl` files through Minecraft's note block sounds, per-target (a player, several players, or the whole server).
 - Accurate MIDI parsing: tempo changes, per-channel General MIDI program, CC7 (volume) / CC11 (expression) automation, and percussion (channel 10) are all honored.
 - Shared **playlists** that loop through multiple songs, with the next song prefetched/parsed in advance so playback doesn't stall.
 - Optional **custom soundpacks** — real instrument samples per GM instrument/octave, packaged into a Minecraft resource pack and pushed to players automatically.
-- **`/midi soundpack fromsf2`** auto-builds a soundpack from a `.sf2`/`.dls` soundfont file (requires `ffmpeg`).
+- **`/score soundpack fromsf2`** auto-builds a soundpack from a `.sf2`/`.dls` soundfont file (requires `ffmpeg`).
 - A lightweight built-in **web control panel** (no extra dependencies) for browsing songs/playlists and controlling playback from a browser, secured by an in-game verification code.
 
 ### Requirements
 
 - A Paper (or Paper-fork) server, API version `26.2`.
 - A JVM with the `java.desktop` module available (needed for MIDI parsing).
-- `ffmpeg` on the server's `PATH` (or configured via `soundfont.ffmpeg-path`) only if you plan to use `/midi soundpack fromsf2`.
+- `ffmpeg` on the server's `PATH` (or configured via `soundfont.ffmpeg-path`) only if you plan to use `/score soundpack fromsf2`.
 
 ### Installation
 
 1. Build the plugin (see [Building from source](#building-from-source)) or grab a built jar, and drop it into your server's `plugins/` folder.
-2. Start the server once to generate the `plugins/OpenMCMelody/` data folder (`config.yml`, `midi/`, `soundpacks/`, `soundfonts/`).
-3. Drop `.mid` files into `plugins/OpenMCMelody/midi/`.
+2. Start the server once to generate the `plugins/OpenMCMelody/` data folder (`config.yml`, `scores/`, `soundpacks/`, `soundfonts/`).
+3. Drop `.mid`/`.midi`/`.musicxml`/`.mxl` files into `plugins/OpenMCMelody/scores/`.
 4. Edit `plugins/OpenMCMelody/config.yml` as needed (see below), then `/reload` or restart.
+
+> Upgrading from an older version that used a `midi/` folder? It's renamed automatically to `scores/` on first launch — nothing to do by hand.
 
 ### Configuration (`config.yml`)
 
@@ -48,20 +50,20 @@ soundfont:
 
 ### Commands
 
-All commands are under `/midi`:
+All commands are under `/score` (`/midi` still works as an alias):
 
 | Command | Description | Permission |
 |---|---|---|
-| `/midi list` | List available MIDI files | `openmcmelody.midi.admin` |
-| `/midi play [target] <filename>` | Play a MIDI file to yourself or a target (quote the filename if playing to yourself and it has spaces; unquoted spaces work once a target is given) | `openmcmelody.midi.admin` |
-| `/midi stop [target]` | Stop playback | `openmcmelody.midi.admin` |
-| `/midi status [target]` | Show current playback status | `openmcmelody.midi.status` (own), `.admin` (others) |
-| `/midi pause [target]` / `/midi resume [target]` | Pause/resume playback | `openmcmelody.midi.status` (own), `.admin` (others) |
-| `/midi playlist list\|show\|create\|delete\|add\|remove\|play` | Manage and play shared playlists | `openmcmelody.midi.playlist` |
-| `/midi soundpack list\|build\|activate\|deactivate` | Manage custom soundpacks | `openmcmelody.midi.admin` |
-| `/midi soundpack fromsf2 <file>` | Build a soundpack from a `.sf2`/`.dls` file (pack name = filename without extension) | `openmcmelody.midi.admin` |
-| `/midi soundpack rebuild <name>` | Re-extract a `fromsf2`-generated soundpack from its original soundfont | `openmcmelody.midi.admin` |
-| `/midi verify <code>` | Confirm a web UI login | everyone |
+| `/score list` | List available song files | `openmcmelody.score.admin` |
+| `/score play [target] <filename>` | Play a song to yourself or a target (quote the filename if playing to yourself and it has spaces; unquoted spaces work once a target is given) | `openmcmelody.score.admin` |
+| `/score stop [target]` | Stop playback | `openmcmelody.score.admin` |
+| `/score status [target]` | Show current playback status | `openmcmelody.score.status` (own), `.admin` (others) |
+| `/score pause [target]` / `/score resume [target]` | Pause/resume playback | `openmcmelody.score.status` (own), `.admin` (others) |
+| `/score playlist list\|show\|create\|delete\|add\|remove\|play` | Manage and play shared playlists | `openmcmelody.score.playlist` |
+| `/score soundpack list\|build\|activate\|deactivate` | Manage custom soundpacks | `openmcmelody.score.admin` |
+| `/score soundpack fromsf2 <file>` | Build a soundpack from a `.sf2`/`.dls` file (pack name = filename without extension) | `openmcmelody.score.admin` |
+| `/score soundpack rebuild <name>` | Re-extract a `fromsf2`-generated soundpack from its original soundfont | `openmcmelody.score.admin` |
+| `/score verify <code>` | Confirm a web UI login | everyone |
 
 Console must always specify an explicit `target`/`player` — it has no implicit self-target.
 
@@ -69,9 +71,9 @@ Console must always specify an explicit `target`/`player` — it has no implicit
 
 | Permission | Default | Description |
 |---|---|---|
-| `openmcmelody.midi.admin` | op | List, play and stop MIDI songs for any player, and check any player's status |
-| `openmcmelody.midi.playlist` | true | Manage and play shared MIDI playlists |
-| `openmcmelody.midi.status` | true | Check your own current MIDI playback status |
+| `openmcmelody.score.admin` | op | List, play and stop songs for any player, and check any player's status |
+| `openmcmelody.score.playlist` | true | Manage and play shared playlists |
+| `openmcmelody.score.status` | true | Check your own current playback status |
 
 ### Soundpacks
 
@@ -86,15 +88,15 @@ sounds:
   basedrum: kick.ogg
 ```
 
-Sound files must already be Ogg Vorbis (`.ogg`). Any slot you don't define falls back to Minecraft's vanilla note block sound. Use `/midi soundpack build <name>` to validate and zip it, then `/midi soundpack activate <name>` to push it to online players (requires `web.public-url` to be set).
+Sound files must already be Ogg Vorbis (`.ogg`). Any slot you don't define falls back to Minecraft's vanilla note block sound. Use `/score soundpack build <name>` to validate and zip it, then `/score soundpack activate <name>` to push it to online players (requires `web.public-url` to be set).
 
-To generate one automatically from a soundfont, drop a `.sf2`/`.dls` file into `soundpacks/../soundfonts/` and run `/midi soundpack fromsf2 <file>` — the pack is named after the file (extension stripped), and progress ("42%: Extracting c_3 from gm.sf2") shows in your action bar while it works. Requires `ffmpeg` installed and reachable.
+To generate one automatically from a soundfont, drop a `.sf2`/`.dls` file into `soundpacks/../soundfonts/` and run `/score soundpack fromsf2 <file>` — the pack is named after the file (extension stripped), and progress ("42%: Extracting c_3 from gm.sf2") shows in your action bar while it works. Requires `ffmpeg` installed and reachable.
 
-Run `/midi soundpack rebuild <name>` to re-extract a `fromsf2`-generated pack from its original soundfont file (found automatically from the pack's own pack.yml) — useful after a plugin update changes how samples are captured, without needing to re-type the soundfont filename or pack name.
+Run `/score soundpack rebuild <name>` to re-extract a `fromsf2`-generated pack from its original soundfont file (found automatically from the pack's own pack.yml) — useful after a plugin update changes how samples are captured, without needing to re-type the soundfont filename or pack name.
 
 ### Web control panel
 
-If `web.enabled` is true (default), a control panel is served at `http://<bind>:<port>/`. Login works by claiming a Minecraft username in the browser, receiving a one-time code, and confirming it in-game with `/midi verify <code>` — so only the real owner of that username can log in.
+If `web.enabled` is true (default), a control panel is served at `http://<bind>:<port>/`. Login works by claiming a Minecraft username in the browser, receiving a one-time code, and confirming it in-game with `/score verify <code>` — so only the real owner of that username can log in.
 
 ### Building from source
 
@@ -111,29 +113,31 @@ There is no automated test suite in this repository.
 
 ### 소개
 
-OpenMCMelody는 표준 MIDI 파일(`.mid`)을 마인크래프트의 노트블록 소리로 재생해주는 Paper 서버 플러그인입니다. 특정 플레이어, 여러 명, 또는 서버 전체를 대상으로 재생할 수 있으며, 커스텀 악기 사운드팩과 브라우저 기반 제어판도 지원합니다.
+OpenMCMelody는 MIDI와 MusicXML 파일을 마인크래프트의 노트블록 소리로 재생해주는 Paper 서버 플러그인입니다. 특정 플레이어, 여러 명, 또는 서버 전체를 대상으로 재생할 수 있으며, 커스텀 악기 사운드팩과 브라우저 기반 제어판도 지원합니다.
 
 ### 주요 기능
 
-- `.mid` 파일을 노트블록 소리로 재생하며, 대상(플레이어 한 명, 여러 명, 또는 전체)을 지정할 수 있습니다.
+- `.mid`/`.midi`, `.musicxml`/`.mxl` 파일을 노트블록 소리로 재생하며, 대상(플레이어 한 명, 여러 명, 또는 전체)을 지정할 수 있습니다.
 - 정확한 MIDI 파싱: 템포 변화, 채널별 General MIDI 악기(Program), CC7(볼륨)/CC11(익스프레션) 오토메이션, 타악기(채널 10)까지 모두 반영됩니다.
 - 여러 곡을 이어서 재생하는 공유 **재생목록(playlist)** 기능 — 다음 곡을 미리 파싱해두어 전환 시 끊김이 없습니다.
 - 선택적인 **커스텀 사운드팩** — GM 악기/옥타브별 실제 악기 샘플을 리소스팩으로 패키징해 플레이어에게 자동으로 전달합니다.
-- **`/midi soundpack fromsf2`** 명령으로 `.sf2`/`.dls` 사운드폰트 파일에서 사운드팩을 자동 생성할 수 있습니다 (`ffmpeg` 필요).
+- **`/score soundpack fromsf2`** 명령으로 `.sf2`/`.dls` 사운드폰트 파일에서 사운드팩을 자동 생성할 수 있습니다 (`ffmpeg` 필요).
 - 별도 의존성 없이 내장된 가벼운 **웹 제어판** — 브라우저에서 곡/재생목록을 탐색하고 재생을 제어할 수 있으며, 게임 내 인증 코드로 보호됩니다.
 
 ### 요구 사항
 
 - Paper(또는 Paper 기반 포크) 서버, API 버전 `26.2`.
 - MIDI 파싱을 위해 `java.desktop` 모듈이 포함된 JVM.
-- `/midi soundpack fromsf2`를 사용할 경우에만 서버의 `PATH`에 `ffmpeg`가 있어야 합니다 (또는 `soundfont.ffmpeg-path`로 경로 지정).
+- `/score soundpack fromsf2`를 사용할 경우에만 서버의 `PATH`에 `ffmpeg`가 있어야 합니다 (또는 `soundfont.ffmpeg-path`로 경로 지정).
 
 ### 설치
 
 1. 플러그인을 빌드하거나([소스에서 빌드하기](#소스에서-빌드하기) 참고) 빌드된 jar 파일을 받아 서버의 `plugins/` 폴더에 넣습니다.
-2. 서버를 한 번 실행해 `plugins/OpenMCMelody/` 데이터 폴더(`config.yml`, `midi/`, `soundpacks/`, `soundfonts/`)를 생성합니다.
-3. `.mid` 파일을 `plugins/OpenMCMelody/midi/`에 넣습니다.
+2. 서버를 한 번 실행해 `plugins/OpenMCMelody/` 데이터 폴더(`config.yml`, `scores/`, `soundpacks/`, `soundfonts/`)를 생성합니다.
+3. `.mid`/`.midi`/`.musicxml`/`.mxl` 파일을 `plugins/OpenMCMelody/scores/`에 넣습니다.
 4. 필요에 따라 `plugins/OpenMCMelody/config.yml`을 수정한 뒤(아래 참고) `/reload`하거나 서버를 재시작합니다.
+
+> 예전 버전의 `midi/` 폴더를 쓰던 서버라면, 처음 실행할 때 자동으로 `scores/`로 이름이 바뀝니다 — 직접 옮길 필요 없습니다.
 
 ### 설정 (`config.yml`)
 
@@ -153,20 +157,20 @@ soundfont:
 
 ### 명령어
 
-모든 명령어는 `/midi` 하위에 있습니다:
+모든 명령어는 `/score` 하위에 있습니다 (`/midi`도 별칭으로 계속 동작합니다):
 
 | 명령어 | 설명 | 권한 |
 |---|---|---|
-| `/midi list` | 사용 가능한 MIDI 파일 목록 표시 | `openmcmelody.midi.admin` |
-| `/midi play [대상] <파일명>` | 자신 또는 대상에게 MIDI 파일 재생 (자신에게 재생 시 공백이 있으면 따옴표 필요; 대상을 지정하면 따옴표 없이도 공백 가능) | `openmcmelody.midi.admin` |
-| `/midi stop [대상]` | 재생 중지 | `openmcmelody.midi.admin` |
-| `/midi status [대상]` | 현재 재생 상태 확인 | 본인: `openmcmelody.midi.status`, 타인: `.admin` |
-| `/midi pause [대상]` / `/midi resume [대상]` | 재생 일시정지/재개 | 본인: `openmcmelody.midi.status`, 타인: `.admin` |
-| `/midi playlist list\|show\|create\|delete\|add\|remove\|play` | 공유 재생목록 관리 및 재생 | `openmcmelody.midi.playlist` |
-| `/midi soundpack list\|build\|activate\|deactivate` | 커스텀 사운드팩 관리 | `openmcmelody.midi.admin` |
-| `/midi soundpack fromsf2 <파일>` | `.sf2`/`.dls` 파일로부터 사운드팩 생성 (팩 이름은 확장자를 뺀 파일 이름) | `openmcmelody.midi.admin` |
-| `/midi soundpack rebuild <이름>` | `fromsf2`로 만든 사운드팩을 원본 사운드폰트에서 다시 추출 | `openmcmelody.midi.admin` |
-| `/midi verify <코드>` | 웹 UI 로그인 확인 | 모든 사용자 |
+| `/score list` | 사용 가능한 곡 파일 목록 표시 | `openmcmelody.score.admin` |
+| `/score play [대상] <파일명>` | 자신 또는 대상에게 곡 재생 (자신에게 재생 시 공백이 있으면 따옴표 필요; 대상을 지정하면 따옴표 없이도 공백 가능) | `openmcmelody.score.admin` |
+| `/score stop [대상]` | 재생 중지 | `openmcmelody.score.admin` |
+| `/score status [대상]` | 현재 재생 상태 확인 | 본인: `openmcmelody.score.status`, 타인: `.admin` |
+| `/score pause [대상]` / `/score resume [대상]` | 재생 일시정지/재개 | 본인: `openmcmelody.score.status`, 타인: `.admin` |
+| `/score playlist list\|show\|create\|delete\|add\|remove\|play` | 공유 재생목록 관리 및 재생 | `openmcmelody.score.playlist` |
+| `/score soundpack list\|build\|activate\|deactivate` | 커스텀 사운드팩 관리 | `openmcmelody.score.admin` |
+| `/score soundpack fromsf2 <파일>` | `.sf2`/`.dls` 파일로부터 사운드팩 생성 (팩 이름은 확장자를 뺀 파일 이름) | `openmcmelody.score.admin` |
+| `/score soundpack rebuild <이름>` | `fromsf2`로 만든 사운드팩을 원본 사운드폰트에서 다시 추출 | `openmcmelody.score.admin` |
+| `/score verify <코드>` | 웹 UI 로그인 확인 | 모든 사용자 |
 
 콘솔에서는 자기 자신을 대상으로 할 수 없으므로 항상 `target`/`player`를 명시해야 합니다.
 
@@ -174,9 +178,9 @@ soundfont:
 
 | 권한 | 기본값 | 설명 |
 |---|---|---|
-| `openmcmelody.midi.admin` | op | 모든 플레이어에 대해 MIDI 곡 목록 조회, 재생, 중지, 상태 확인 |
-| `openmcmelody.midi.playlist` | true | 공유 MIDI 재생목록 관리 및 재생 |
-| `openmcmelody.midi.status` | true | 자신의 현재 MIDI 재생 상태 확인 |
+| `openmcmelody.score.admin` | op | 모든 플레이어에 대해 곡 목록 조회, 재생, 중지, 상태 확인 |
+| `openmcmelody.score.playlist` | true | 공유 재생목록 관리 및 재생 |
+| `openmcmelody.score.status` | true | 자신의 현재 재생 상태 확인 |
 
 ### 사운드팩
 
@@ -191,15 +195,15 @@ sounds:
   basedrum: kick.ogg
 ```
 
-사운드 파일은 반드시 Ogg Vorbis(`.ogg`) 형식이어야 합니다. 정의하지 않은 슬롯은 마인크래프트 기본(vanilla) 노트블록 소리로 대체됩니다. `/midi soundpack build <이름>`으로 검증 및 압축한 뒤, `/midi soundpack activate <이름>`으로 온라인 플레이어에게 전달합니다 (`web.public-url` 설정 필요).
+사운드 파일은 반드시 Ogg Vorbis(`.ogg`) 형식이어야 합니다. 정의하지 않은 슬롯은 마인크래프트 기본(vanilla) 노트블록 소리로 대체됩니다. `/score soundpack build <이름>`으로 검증 및 압축한 뒤, `/score soundpack activate <이름>`으로 온라인 플레이어에게 전달합니다 (`web.public-url` 설정 필요).
 
-사운드폰트로부터 자동 생성하려면 `.sf2`/`.dls` 파일을 `soundfonts/` 폴더에 넣고 `/midi soundpack fromsf2 <파일>`을 실행하세요 — 팩 이름은 파일 이름(확장자 제외)으로 자동 지정되고, 작업 중에는 액션바에 진행률("42%: Extracting c_3 from gm.sf2")이 표시됩니다. `ffmpeg`가 설치되어 있어야 합니다.
+사운드폰트로부터 자동 생성하려면 `.sf2`/`.dls` 파일을 `soundfonts/` 폴더에 넣고 `/score soundpack fromsf2 <파일>`을 실행하세요 — 팩 이름은 파일 이름(확장자 제외)으로 자동 지정되고, 작업 중에는 액션바에 진행률("42%: Extracting c_3 from gm.sf2")이 표시됩니다. `ffmpeg`가 설치되어 있어야 합니다.
 
-`/midi soundpack rebuild <이름>`을 실행하면 `fromsf2`로 만든 사운드팩을 원본 사운드폰트 파일(pack.yml에 자동 기록됨)로부터 다시 추출합니다 — 플러그인 업데이트로 샘플 추출 방식이 바뀐 뒤 사운드폰트 파일명이나 팩 이름을 다시 입력할 필요 없이 갱신할 때 유용합니다.
+`/score soundpack rebuild <이름>`을 실행하면 `fromsf2`로 만든 사운드팩을 원본 사운드폰트 파일(pack.yml에 자동 기록됨)로부터 다시 추출합니다 — 플러그인 업데이트로 샘플 추출 방식이 바뀐 뒤 사운드폰트 파일명이나 팩 이름을 다시 입력할 필요 없이 갱신할 때 유용합니다.
 
 ### 웹 제어판
 
-`web.enabled`가 true(기본값)이면 `http://<bind>:<port>/`에서 제어판이 제공됩니다. 로그인은 브라우저에서 마인크래프트 사용자명을 입력하고 발급받은 일회성 코드를 게임 내에서 `/midi verify <코드>`로 확인하는 방식으로 동작하여, 해당 사용자명의 실제 소유자만 로그인할 수 있습니다.
+`web.enabled`가 true(기본값)이면 `http://<bind>:<port>/`에서 제어판이 제공됩니다. 로그인은 브라우저에서 마인크래프트 사용자명을 입력하고 발급받은 일회성 코드를 게임 내에서 `/score verify <코드>`로 확인하는 방식으로 동작하여, 해당 사용자명의 실제 소유자만 로그인할 수 있습니다.
 
 ### 소스에서 빌드하기
 

@@ -1,6 +1,6 @@
 package io.github.jwyoon1220.openMCMelody
 
-import io.github.jwyoon1220.openMCMelody.command.MidiCommand
+import io.github.jwyoon1220.openMCMelody.command.ScoreCommand
 import io.github.jwyoon1220.openMCMelody.jukebox.JukeboxListener
 import io.github.jwyoon1220.openMCMelody.jukebox.JukeboxPlaybackManager
 import io.github.jwyoon1220.openMCMelody.jukebox.SpecialJukeboxManager
@@ -35,8 +35,9 @@ class OpenMCMelody : JavaPlugin() {
         saveDefaultConfig()
         val publicUrl = config.getString("web.public-url", "")!!.trimEnd('/')
 
-        val midiFolder = File(dataFolder, "midi")
-        midiFolder.mkdirs()
+        val scoresFolder = File(dataFolder, "scores")
+        migrateLegacyMidiFolder(scoresFolder)
+        scoresFolder.mkdirs()
         val soundpacksFolder = File(dataFolder, "soundpacks")
         soundpacksFolder.mkdirs()
         val soundfontsFolder = File(dataFolder, "soundfonts")
@@ -48,7 +49,7 @@ class OpenMCMelody : JavaPlugin() {
         val restoredPack = soundPackManager.restoreActiveFromDisk()
         if (restoredPack != null) logger.info("Restored active soundpack '$restoredPack'.")
         val playModeManager = PlayModeManager(this, File(dataFolder, "playmodes.yml"))
-        val playbackManager = PlaybackManager(this, playlistManager, songCache, midiFolder, soundPackManager, playModeManager)
+        val playbackManager = PlaybackManager(this, playlistManager, songCache, scoresFolder, soundPackManager, playModeManager)
         playbackManager.enable()
         this.playbackManager = playbackManager
 
@@ -58,10 +59,10 @@ class OpenMCMelody : JavaPlugin() {
         val jukeboxPlaybackManager = JukeboxPlaybackManager(this, songCache, soundPackManager)
         jukeboxPlaybackManager.enable()
         this.jukeboxPlaybackManager = jukeboxPlaybackManager
-        server.pluginManager.registerEvents(JukeboxListener(this, jukeboxManager, jukeboxPlaybackManager, midiFolder), this)
+        server.pluginManager.registerEvents(JukeboxListener(this, jukeboxManager, jukeboxPlaybackManager, scoresFolder), this)
 
         val webAuthManager = if (config.getBoolean("web.enabled", true)) {
-            startWebServer(midiFolder, songCache, playbackManager, playlistManager, soundPackManager)
+            startWebServer(scoresFolder, songCache, playbackManager, playlistManager, soundPackManager)
         } else {
             null
         }
@@ -69,17 +70,33 @@ class OpenMCMelody : JavaPlugin() {
         val ffmpegPath = config.getString("soundfont.ffmpeg-path", "ffmpeg")!!
         val soundFontConverter = SoundFontConverter(this, ffmpegPath)
 
-        val midiCommand = MidiCommand(
-            this, midiFolder, songCache, playbackManager, playlistManager, webAuthManager,
+        val scoreCommand = ScoreCommand(
+            this, scoresFolder, songCache, playbackManager, playlistManager, webAuthManager,
             soundPackManager, publicUrl, soundfontsFolder, soundpacksFolder, soundFontConverter, playModeManager,
         )
         lifecycleManager.registerEventHandler(LifecycleEvents.COMMANDS) { event ->
-            event.registrar().register(midiCommand.build(), "Play MIDI files as note block music")
+            event.registrar().register(scoreCommand.build("score"), "Play song files as note block music")
+            event.registrar().register(scoreCommand.build("midi"), "Alias for /score")
+        }
+    }
+
+    /**
+     * Older installs stored songs under `midi/`; the plugin now supports MusicXML too, so the
+     * folder is renamed to `scores/`. Move any leftover files across on first launch after the
+     * upgrade so server owners don't have to do it by hand.
+     */
+    private fun migrateLegacyMidiFolder(scoresFolder: File) {
+        val legacyFolder = File(dataFolder, "midi")
+        if (!legacyFolder.isDirectory || scoresFolder.exists()) return
+        if (legacyFolder.renameTo(scoresFolder)) {
+            logger.info("Migrated ${legacyFolder.path} to ${scoresFolder.path}.")
+        } else {
+            logger.warning("Found a legacy midi/ folder but could not rename it to scores/ - please move its contents manually.")
         }
     }
 
     private fun startWebServer(
-        midiFolder: File,
+        scoresFolder: File,
         songCache: SongCache,
         playbackManager: PlaybackManager,
         playlistManager: PlaylistManager,
@@ -88,7 +105,7 @@ class OpenMCMelody : JavaPlugin() {
         val bind = config.getString("web.bind", "0.0.0.0")!!
         val port = config.getInt("web.port", 8080)
         val authManager = WebAuthManager()
-        val server = WebServer(this, authManager, midiFolder, songCache, playbackManager, playlistManager, soundPackManager)
+        val server = WebServer(this, authManager, scoresFolder, songCache, playbackManager, playlistManager, soundPackManager)
         return try {
             server.start(bind, port)
             webServer = server

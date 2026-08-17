@@ -7,11 +7,11 @@ import io.github.jwyoon1220.openMCMelody.soundpack.SoundPackManager
 import io.papermc.paper.command.brigadier.CommandSourceStack
 import java.io.File
 
-object MidiSuggestions {
+object ScoreSuggestions {
 
-    fun midiFiles(midiFolder: File): SuggestionProvider<CommandSourceStack> = SuggestionProvider { _, builder ->
+    fun scoreFiles(scoresFolder: File): SuggestionProvider<CommandSourceStack> = SuggestionProvider { _, builder ->
         val remaining = builder.remaining.lowercase()
-        midiFolder.listFiles { f -> f.isFile && SongFiles.isPlayable(f.name) }
+        scoresFolder.listFiles { f -> f.isFile && SongFiles.isPlayable(f.name) }
             ?.map { it.name }
             ?.sorted()
             ?.filter { it.lowercase().startsWith(remaining) }

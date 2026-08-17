@@ -37,9 +37,14 @@ private const val PERM_ADMIN = Permissions.ADMIN
 private const val PERM_PLAYLIST = Permissions.PLAYLIST
 private const val PERM_STATUS = Permissions.STATUS
 
-class MidiCommand(
+/**
+ * Builds the `/score` command tree. [build] takes the root literal name so the same tree can be
+ * registered twice - once as `score`, once as `midi` - giving pre-rename muscle memory and scripts
+ * a working alias without duplicating any handler logic.
+ */
+class ScoreCommand(
     private val plugin: Plugin,
-    private val midiFolder: File,
+    private val scoresFolder: File,
     private val songCache: SongCache,
     private val playbackManager: PlaybackManager,
     private val playlistManager: PlaylistManager,
@@ -53,8 +58,8 @@ class MidiCommand(
 ) {
     private val mainThreadExecutor: Executor = BukkitExecutors.main(plugin)
 
-    fun build(): LiteralCommandNode<CommandSourceStack> =
-        Commands.literal("midi")
+    fun build(rootName: String = "score"): LiteralCommandNode<CommandSourceStack> =
+        Commands.literal(rootName)
             .then(
                 Commands.literal("list")
                     .requires { it.sender.hasPermission(PERM_ADMIN) }
@@ -78,7 +83,7 @@ class MidiCommand(
                         // reached at all. Quotable single-token string avoids that ambiguity; a
                         // filename with spaces just needs quotes ("My Song.mid") when played to self.
                         Commands.argument("filename", StringArgumentType.string())
-                            .suggests(MidiSuggestions.midiFiles(midiFolder))
+                            .suggests(ScoreSuggestions.scoreFiles(scoresFolder))
                             .executes { handlePlay(it, false) },
                     )
                     .then(
@@ -87,7 +92,7 @@ class MidiCommand(
                         Commands.argument("target", ArgumentTypes.players())
                             .then(
                                 Commands.argument("filename", StringArgumentType.greedyString())
-                                    .suggests(MidiSuggestions.midiFiles(midiFolder))
+                                    .suggests(ScoreSuggestions.scoreFiles(scoresFolder))
                                     .executes { handlePlay(it, true) },
                             ),
                     ),
@@ -161,7 +166,7 @@ class MidiCommand(
                     .then(
                         Commands.literal("show").then(
                             Commands.argument("name", StringArgumentType.string())
-                                .suggests(MidiSuggestions.playlistNames(playlistManager))
+                                .suggests(ScoreSuggestions.playlistNames(playlistManager))
                                 .executes { handlePlaylistShow(it) },
                         ),
                     )
@@ -174,17 +179,17 @@ class MidiCommand(
                     .then(
                         Commands.literal("delete").then(
                             Commands.argument("name", StringArgumentType.string())
-                                .suggests(MidiSuggestions.playlistNames(playlistManager))
+                                .suggests(ScoreSuggestions.playlistNames(playlistManager))
                                 .executes { handlePlaylistDelete(it) },
                         ),
                     )
                     .then(
                         Commands.literal("add").then(
                             Commands.argument("name", StringArgumentType.string())
-                                .suggests(MidiSuggestions.playlistNames(playlistManager))
+                                .suggests(ScoreSuggestions.playlistNames(playlistManager))
                                 .then(
                                     Commands.argument("filename", StringArgumentType.string())
-                                        .suggests(MidiSuggestions.midiFiles(midiFolder))
+                                        .suggests(ScoreSuggestions.scoreFiles(scoresFolder))
                                         .executes { handlePlaylistAdd(it) },
                                 ),
                         ),
@@ -192,7 +197,7 @@ class MidiCommand(
                     .then(
                         Commands.literal("remove").then(
                             Commands.argument("name", StringArgumentType.string())
-                                .suggests(MidiSuggestions.playlistNames(playlistManager))
+                                .suggests(ScoreSuggestions.playlistNames(playlistManager))
                                 .then(
                                     Commands.argument("entry", StringArgumentType.string())
                                         .executes { handlePlaylistRemove(it) },
@@ -205,14 +210,14 @@ class MidiCommand(
                                 // Target-first, matching vanilla commands like /effect give or
                                 // /give (target before the rest of the arguments).
                                 Commands.argument("name", StringArgumentType.string())
-                                    .suggests(MidiSuggestions.playlistNames(playlistManager))
+                                    .suggests(ScoreSuggestions.playlistNames(playlistManager))
                                     .executes { handlePlaylistPlay(it, false) },
                             )
                             .then(
                                 Commands.argument("target", ArgumentTypes.players())
                                     .then(
                                         Commands.argument("name", StringArgumentType.string())
-                                            .suggests(MidiSuggestions.playlistNames(playlistManager))
+                                            .suggests(ScoreSuggestions.playlistNames(playlistManager))
                                             .executes { handlePlaylistPlay(it, true) },
                                     ),
                             ),
@@ -225,14 +230,14 @@ class MidiCommand(
                     .then(
                         Commands.literal("build").then(
                             Commands.argument("name", StringArgumentType.string())
-                                .suggests(MidiSuggestions.soundPacks(soundPackManager))
+                                .suggests(ScoreSuggestions.soundPacks(soundPackManager))
                                 .executes { handleSoundpackBuild(it) },
                         ),
                     )
                     .then(
                         Commands.literal("activate").then(
                             Commands.argument("name", StringArgumentType.string())
-                                .suggests(MidiSuggestions.soundPacks(soundPackManager))
+                                .suggests(ScoreSuggestions.soundPacks(soundPackManager))
                                 .executes { handleSoundpackActivate(it) },
                         ),
                     )
@@ -240,14 +245,14 @@ class MidiCommand(
                     .then(
                         Commands.literal("fromsf2").then(
                             Commands.argument("sf2file", StringArgumentType.string())
-                                .suggests(MidiSuggestions.soundFonts(soundfontsFolder))
+                                .suggests(ScoreSuggestions.soundFonts(soundfontsFolder))
                                 .executes { handleSoundpackFromSf2(it) },
                         ),
                     )
                     .then(
                         Commands.literal("rebuild").then(
                             Commands.argument("name", StringArgumentType.string())
-                                .suggests(MidiSuggestions.soundPacks(soundPackManager))
+                                .suggests(ScoreSuggestions.soundPacks(soundPackManager))
                                 .executes { handleSoundpackRebuild(it) },
                         ),
                     ),
@@ -257,12 +262,12 @@ class MidiCommand(
     // ---- list ----
 
     private fun handleList(ctx: CommandContext<CommandSourceStack>): Int {
-        val files = listMidiFiles()
+        val files = listSongFiles()
         val sender = ctx.source.sender
         if (files.isEmpty()) {
-            sender.sendMessage("No MIDI files found in the midi/ folder.")
+            sender.sendMessage("No song files found in the scores/ folder.")
         } else {
-            sender.sendMessage("MIDI files (${files.size}): ${files.joinToString(", ")}")
+            sender.sendMessage("Song files (${files.size}): ${files.joinToString(", ")}")
         }
         return Command.SINGLE_SUCCESS
     }
@@ -293,9 +298,9 @@ class MidiCommand(
     private fun handlePlay(ctx: CommandContext<CommandSourceStack>, hasTargetArg: Boolean): Int {
         val sender = ctx.source.sender
         val filename = StringArgumentType.getString(ctx, "filename")
-        val file = File(midiFolder, filename)
+        val file = File(scoresFolder, filename)
         if (!file.isFile) {
-            sender.sendMessage("MIDI file not found: $filename")
+            sender.sendMessage("Song file not found: $filename")
             return Command.SINGLE_SUCCESS
         }
         val targets = resolveTargetsOrSelf(ctx, "target", hasTargetArg, sender) ?: run {
@@ -322,7 +327,7 @@ class MidiCommand(
             return Command.SINGLE_SUCCESS
         }
         playbackManager.stop(targets)
-        sender.sendMessage("Stopped MIDI playback for ${targets.size} target(s).")
+        sender.sendMessage("Stopped playback for ${targets.size} target(s).")
         return Command.SINGLE_SUCCESS
     }
 
@@ -336,7 +341,7 @@ class MidiCommand(
             sender as? Player
         }
         if (target == null) {
-            sender.sendMessage(if (hasArg) "Player not found or offline." else "Console has no MIDI status; specify a player.")
+            sender.sendMessage(if (hasArg) "Player not found or offline." else "Console has no playback status; specify a player.")
             return Command.SINGLE_SUCCESS
         }
 
@@ -439,7 +444,7 @@ class MidiCommand(
             sender.sendMessage("Only an in-game player has a playback mode.")
             return Command.SINGLE_SUCCESS
         }
-        sender.sendMessage("Your playback mode: ${modeLabel(playModeManager.modeOf(player.uniqueId))}. Change with /midi mode <tick|instant>.")
+        sender.sendMessage("Your playback mode: ${modeLabel(playModeManager.modeOf(player.uniqueId))}. Change with /score mode <tick|instant>.")
         return Command.SINGLE_SUCCESS
     }
 
@@ -500,8 +505,8 @@ class MidiCommand(
         val name = StringArgumentType.getString(ctx, "name")
         val filename = StringArgumentType.getString(ctx, "filename")
         val sender = ctx.source.sender
-        if (!File(midiFolder, filename).isFile) {
-            sender.sendMessage("MIDI file not found: $filename")
+        if (!File(scoresFolder, filename).isFile) {
+            sender.sendMessage("Song file not found: $filename")
             return Command.SINGLE_SUCCESS
         }
         sender.sendMessage(if (playlistManager.addSong(name, filename)) "Added '$filename' to playlist '$name'." else "Playlist '$name' not found.")
@@ -532,9 +537,9 @@ class MidiCommand(
             return Command.SINGLE_SUCCESS
         }
         val firstSongName = playlist.songs[0]
-        val firstFile = File(midiFolder, firstSongName)
+        val firstFile = File(scoresFolder, firstSongName)
         if (!firstFile.isFile) {
-            sender.sendMessage("First song '$firstSongName' is missing from midi/.")
+            sender.sendMessage("First song '$firstSongName' is missing from scores/.")
             return Command.SINGLE_SUCCESS
         }
 
@@ -645,7 +650,7 @@ class MidiCommand(
         }
         val sf2Name = SoundPackLoader.sourceSoundfont(packFolder)
         if (sf2Name == null) {
-            sender.sendMessage("Soundpack '$packName' has no recorded source soundfont - it wasn't auto-generated by /midi soundpack fromsf2, so it can't be rebuilt automatically.")
+            sender.sendMessage("Soundpack '$packName' has no recorded source soundfont - it wasn't auto-generated by /score soundpack fromsf2, so it can't be rebuilt automatically.")
             return Command.SINGLE_SUCCESS
         }
         val sf2File = File(soundfontsFolder, sf2Name)
@@ -676,7 +681,7 @@ class MidiCommand(
                     "Built soundpack '$packName' from '${sf2File.name}': ${result.mainSlotCount} instrument(s)" +
                         (if (result.releaseSlotCount > 0) " (${result.releaseSlotCount} with a release tail)" else "") +
                         (if (result.failedConversions > 0) ", ${result.failedConversions} failed to encode" else "") +
-                        ". Run /midi soundpack build $packName to verify, then activate it.",
+                        ". Run /score soundpack build $packName to verify, then activate it.",
                 )
             }
         }
@@ -684,8 +689,8 @@ class MidiCommand(
 
     // ---- helpers ----
 
-    private fun listMidiFiles(): List<String> =
-        midiFolder.listFiles { f -> f.isFile && SongFiles.isPlayable(f.name) }
+    private fun listSongFiles(): List<String> =
+        scoresFolder.listFiles { f -> f.isFile && SongFiles.isPlayable(f.name) }
             ?.map { it.name }?.sorted() ?: emptyList()
 
     private fun resolvePlayers(ctx: CommandContext<CommandSourceStack>, name: String): Set<UUID> {

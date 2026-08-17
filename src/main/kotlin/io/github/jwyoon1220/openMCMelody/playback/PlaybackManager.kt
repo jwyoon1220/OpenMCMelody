@@ -50,7 +50,7 @@ class PlaybackManager(
     private val plugin: Plugin,
     private val playlistManager: PlaylistManager,
     private val songCache: SongCache,
-    private val midiFolder: File,
+    private val scoresFolder: File,
     private val soundPackManager: SoundPackManager,
     private val playModeManager: PlayModeManager,
 ) {
@@ -610,7 +610,7 @@ class PlaybackManager(
         val playlist = playlistManager.get(playlistName) ?: return
         if (playlist.songs.isEmpty()) return
         val nextIndex = (session.songIndex + 1) % playlist.songs.size
-        val file = File(midiFolder, playlist.songs[nextIndex])
+        val file = File(scoresFolder, playlist.songs[nextIndex])
         if (file.isFile) songCache.get(file)
     }
 
@@ -629,7 +629,7 @@ class PlaybackManager(
             index = (index + 1) % songs.size
             attempts++
             val filename = songs[index]
-            val file = File(midiFolder, filename)
+            val file = File(scoresFolder, filename)
             if (!file.isFile) {
                 plugin.logger.warning("Playlist '$playlistName': skipping missing song '$filename'")
                 continue

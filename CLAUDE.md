@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-OpenMCMelody is a Paper/Minecraft plugin (Kotlin) that plays MIDI files as in-game note block music. It parses Standard MIDI Files, maps each note to a General MIDI instrument/octave "slot", and plays it to targeted players either via vanilla note block sounds or a custom-built resource pack (soundpack) with real instrument samples. It also ships a small built-in HTTP control panel for browser-based control.
+OpenMCMelody is a Paper/Minecraft plugin (Kotlin) that plays song files (Standard MIDI Files and MusicXML) as in-game note block music. It parses each format into a common internal representation, maps each note to a General MIDI instrument/octave "slot", and plays it to targeted players either via vanilla note block sounds or a custom-built resource pack (soundpack) with real instrument samples. It also ships a small built-in HTTP control panel for browser-based control.
 
 ## Build / run commands
 
@@ -38,13 +38,13 @@ A soundpack is a `soundpacks/<name>/pack.yml` (declares any subset of the GM1 in
 
 ### Web control panel (`web` package)
 
-`WebServer` uses the JDK's built-in `com.sun.net.httpserver.HttpServer` (no external HTTP dependency) on a small worker thread pool — never the Bukkit main thread. Anything touching `PlaybackManager` or live `Player` state is bounced to the main thread via `MainThreadBridge.run` (blocks the HTTP worker on a `CompletableFuture` filled by a scheduled Bukkit task; `PlaylistManager`/`SongCache` are already thread-safe and called directly). Auth (`WebAuthManager`) is in-game-code login: a browser claims a Minecraft username, gets a one-time code, and only the real player with that username can complete the login by running `/midi verify <code>` — the browser's claimed identity is never trusted on its own. The frontend is a single static file, `src/main/resources/web/index.html`, served as-is (no build step/bundler).
+`WebServer` uses the JDK's built-in `com.sun.net.httpserver.HttpServer` (no external HTTP dependency) on a small worker thread pool — never the Bukkit main thread. Anything touching `PlaybackManager` or live `Player` state is bounced to the main thread via `MainThreadBridge.run` (blocks the HTTP worker on a `CompletableFuture` filled by a scheduled Bukkit task; `PlaylistManager`/`SongCache` are already thread-safe and called directly). Auth (`WebAuthManager`) is in-game-code login: a browser claims a Minecraft username, gets a one-time code, and only the real player with that username can complete the login by running `/score verify <code>` — the browser's claimed identity is never trusted on its own. The frontend is a single static file, `src/main/resources/web/index.html`, served as-is (no build step/bundler).
 
 The `web.public-url` config value matters specifically for resource pack delivery: `web.bind` is only a bind address, but Minecraft clients download resource packs over HTTP from `public-url`, so it must be reachable by players and include the port.
 
 ### Commands (`command` package)
 
-`MidiCommand` builds a single Brigadier command tree (`/midi ...`) registered via Paper's `LifecycleEvents.COMMANDS`. Permission gating happens per-node via `.requires { ... }` against the three permissions in `Permissions.kt` (`openmcmelody.midi.admin`/`.playlist`/`.status`, declared in `plugin.yml`). Most subcommands default target to the sender if no `target` argument is given; console has no implicit self-target and must always specify one explicitly.
+`ScoreCommand` builds a single Brigadier command tree, registered twice via Paper's `LifecycleEvents.COMMANDS` under both `/score` (canonical) and `/midi` (alias, kept for pre-rename muscle memory/scripts). Permission gating happens per-node via `.requires { ... }` against the three permissions in `Permissions.kt` (`openmcmelody.score.admin`/`.playlist`/`.status`, declared in `plugin.yml`). Most subcommands default target to the sender if no `target` argument is given; console has no implicit self-target and must always specify one explicitly.
 
 ### Playlists (`playlist` package)
 
