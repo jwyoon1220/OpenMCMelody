@@ -97,7 +97,7 @@ class SoundPackManager(private val soundpacksFolder: File, private val stateFile
     fun pushTo(player: Player, publicUrl: String) {
         val name = activeName ?: return
         val result = builds[name] ?: return
-        player.setResourcePack(resourcePackUrl(publicUrl, name), result.pack.sha1, null as String?, false)
+        player.setResourcePack(resourcePackUrl(publicUrl, name), result.pack.sha1.toHexString())
     }
 
     /** Resolves [slot] to a custom `openmcmelody:<slot>` sound key via the active pack, or null to fall back to vanilla. */

@@ -105,15 +105,12 @@ object SoundPackLoader {
                         "must be a standard GM1 instrument name or one of basedrum/snare/hat/cow_bell",
                 )
             val subSection = section.getConfigurationSection(key)
-            val checkpoints = if (subSection != null) {
-                subSection.getKeys(false).map { holdKey ->
-                    val holdMillis = holdKey.toLongOrNull()
-                        ?: throw SoundPackLoadException("'release_sounds.$key' in soundpacks/${folder.name}/pack.yml has a non-numeric checkpoint key '$holdKey'")
-                    ReleaseCheckpoint(holdMillis, resolveReleaseFile(subSection.getString(holdKey), folder, key))
-                }
-            } else {
-                listOf(ReleaseCheckpoint(LEGACY_RELEASE_HOLD_MILLIS, resolveReleaseFile(section.getString(key), folder, key)))
+            val checkpoints = subSection?.getKeys(false)?.map { holdKey ->
+                val holdMillis = holdKey.toLongOrNull()
+                    ?: throw SoundPackLoadException("'release_sounds.$key' in soundpacks/${folder.name}/pack.yml has a non-numeric checkpoint key '$holdKey'")
+                ReleaseCheckpoint(holdMillis, resolveReleaseFile(subSection.getString(holdKey), folder, key))
             }
+                ?: listOf(ReleaseCheckpoint(LEGACY_RELEASE_HOLD_MILLIS, resolveReleaseFile(section.getString(key), folder, key)))
             if (checkpoints.isEmpty()) throw SoundPackLoadException("'release_sounds.$key' in soundpacks/${folder.name}/pack.yml defines no checkpoints")
             result[slot] = checkpoints.sortedBy { it.holdMillis }
         }
