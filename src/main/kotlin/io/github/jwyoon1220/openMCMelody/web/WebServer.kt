@@ -28,7 +28,7 @@ import java.util.concurrent.Executors
 class WebServer(
     private val plugin: Plugin,
     private val authManager: WebAuthManager,
-    private val midiFolder: File,
+    private val scoresFolder: File,
     private val songCache: SongCache,
     private val playbackManager: PlaybackManager,
     private val playlistManager: PlaylistManager,
@@ -115,8 +115,7 @@ class WebServer(
         val pending = authManager.pendingLogin(parseCookies(exchange)["omm_login"])
             ?: return respondJson(exchange, 200, mapOf("status" to "expired"))
 
-        val verifiedId = pending.verifiedPlayerId
-        if (verifiedId == null) return respondJson(exchange, 200, mapOf("status" to "pending"))
+        val verifiedId = pending.verifiedPlayerId ?: return respondJson(exchange, 200, mapOf("status" to "pending"))
 
         val token = authManager.createSession(verifiedId, pending.verifiedPlayerName!!)
         authManager.removePendingLogin(pending.loginId)
@@ -144,7 +143,7 @@ class WebServer(
     private fun handleSongs(exchange: HttpExchange) {
         if (exchange.requestMethod != "GET") return respondJson(exchange, 405, mapOf("error" to "Method not allowed"))
         requireSession(exchange) ?: return
-        respondJson(exchange, 200, listMidiFiles())
+        respondJson(exchange, 200, listSongFiles())
     }
 
     private fun handlePlayers(exchange: HttpExchange) {
@@ -197,8 +196,8 @@ class WebServer(
             }
             segments.size == 2 && segments[1] == "songs" && method == "POST" -> {
                 val filename = readJsonBody(exchange).jsonString("filename")
-                if (filename.isNullOrEmpty() || !File(midiFolder, filename).isFile) {
-                    return respondJson(exchange, 400, mapOf("error" to "Unknown MIDI file"))
+                if (filename.isNullOrEmpty() || !File(scoresFolder, filename).isFile) {
+                    return respondJson(exchange, 400, mapOf("error" to "Unknown song file"))
                 }
                 val ok = playlistManager.addSong(segments[0], filename)
                 respondJson(exchange, if (ok) 200 else 404, mapOf("ok" to ok))
@@ -222,8 +221,8 @@ class WebServer(
         val targets = resolveTargets(readJsonBody(exchange), session)
         if (targets.isEmpty()) return respondJson(exchange, 400, mapOf("error" to "No valid targets"))
 
-        val firstFile = File(midiFolder, playlist.songs[0])
-        if (!firstFile.isFile) return respondJson(exchange, 400, mapOf("error" to "First song missing from midi/"))
+        val firstFile = File(scoresFolder, playlist.songs[0])
+        if (!firstFile.isFile) return respondJson(exchange, 400, mapOf("error" to "First song missing from scores/"))
 
         val song = try {
             songCache.get(firstFile).join()
@@ -277,8 +276,8 @@ class WebServer(
         val body = readJsonBody(exchange)
         val filename = body.jsonString("filename")
         if (filename.isNullOrEmpty()) return respondJson(exchange, 400, mapOf("error" to "Missing 'filename'"))
-        val file = File(midiFolder, filename)
-        if (!file.isFile) return respondJson(exchange, 404, mapOf("error" to "MIDI file not found"))
+        val file = File(scoresFolder, filename)
+        if (!file.isFile) return respondJson(exchange, 404, mapOf("error" to "Song file not found"))
         val targets = resolveTargets(body, session)
         if (targets.isEmpty()) return respondJson(exchange, 400, mapOf("error" to "No valid targets"))
 
@@ -332,8 +331,8 @@ class WebServer(
 
     // ---- helpers ----
 
-    private fun listMidiFiles(): List<String> =
-        midiFolder.listFiles { f -> f.isFile && SongFiles.isPlayable(f.name) }
+    private fun listSongFiles(): List<String> =
+        scoresFolder.listFiles { f -> f.isFile && SongFiles.isPlayable(f.name) }
             ?.map { it.name }?.sorted() ?: emptyList()
 
     private fun resolveTargets(body: Map<*, *>, session: WebAuthManager.Session): Set<UUID> =

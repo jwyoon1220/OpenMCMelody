@@ -6,7 +6,7 @@ web:
   enabled: true
   bind: '0.0.0.0'
   # public-url is what player CLIENTS use to reach this server's web server (0.0.0.0 above is
-  # only a bind address, not something a client can connect to). Required for `/midi soundpack
+  # only a bind address, not something a client can connect to). Required for `/score soundpack
   # activate` to work, since Minecraft resource packs are downloaded by the client over HTTP from
   # this URL. MUST include the port below (a bare host defaults to port 80, which nothing is
   # listening on here) - the resource pack download just silently fails otherwise.
@@ -15,7 +15,7 @@ web:
   public-url: ''
   port: 80
 
-# /midi soundpack fromsf2 - auto-builds a soundpack from a .sf2/.dls file dropped into
+# /score soundpack fromsf2 - auto-builds a soundpack from a .sf2/.dls file dropped into
 # soundfonts/. Requires ffmpeg on this machine (only the JDK's built-in MIDI synth is used for
 # rendering; the JDK cannot itself encode Ogg Vorbis, which Minecraft resource packs require).
 soundfont:
