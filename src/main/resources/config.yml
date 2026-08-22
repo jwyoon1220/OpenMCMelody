@@ -6,8 +6,8 @@ web:
   enabled: true
   bind: '0.0.0.0'
   # public-url is what player CLIENTS use to reach this server's web server (0.0.0.0 above is
-  # only a bind address, not something a client can connect to). Required for `/score soundpack
-  # activate` to work, since Minecraft resource packs are downloaded by the client over HTTP from
+  # only a bind address, not something a client can connect to). Required for `/openmcmelody
+  # soundpack activate` to work, since Minecraft resource packs are downloaded by the client over HTTP from
   # this URL. MUST include the port below (a bare host defaults to port 80, which nothing is
   # listening on here) - the resource pack download just silently fails otherwise.
   # Same machine as the client (local testing): 'http://localhost:8080'
@@ -15,9 +15,25 @@ web:
   public-url: ''
   port: 80
 
-# /score soundpack fromsf2 - auto-builds a soundpack from a .sf2/.dls file dropped into
-# soundfonts/. Requires ffmpeg on this machine (only the JDK's built-in MIDI synth is used for
+# /openmcmelody soundpack fromsf2 - auto-builds a soundpack from a .sf2/.dls file dropped into
+# soundfonts/. Also used to convert real audio files dropped into audio/ (see `/openmcmelody
+# audio`). Requires ffmpeg on this machine (only the JDK's built-in MIDI synth is used for
 # rendering; the JDK cannot itself encode Ogg Vorbis, which Minecraft resource packs require).
 soundfont:
   # Path to the ffmpeg executable, or just 'ffmpeg' if it's on this server's PATH.
   ffmpeg-path: 'ffmpeg'
+
+# Server-side lead-time compensation for PlayMode.INSTANT note dispatch (see `/openmcmelody mode`)
+# - fires each listener's note packets earlier by roughly half their measured ping plus a margin
+# for how much that ping jitters, so notes land closer to their true intended moment on a
+# higher-latency client instead of always arriving late by the player's own one-way delay.
+ping-compensation:
+  enabled: true
+  # Multiplier applied to each player's ping jitter (population stddev of their recent ping
+  # samples) before adding it to half their mean ping. Higher = more conservative (compensates for
+  # more of a laggy player's variance) at the cost of firing notes earlier than strictly needed.
+  jitter-safety-factor: 1.0
+  # Hard cap in milliseconds on how early a note can ever be fired, regardless of measured ping/
+  # jitter - protects a very high-ping or wildly unstable connection from throwing timing off by
+  # an excessive amount.
+  max-lead-millis: 250

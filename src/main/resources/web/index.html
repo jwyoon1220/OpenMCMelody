@@ -236,7 +236,7 @@
       </div>
     </div>
     <h2 class="font-headline-sm text-headline-sm text-on-surface mb-2">Log in with your Minecraft account</h2>
-    <p class="font-body-sm text-body-sm text-on-surface-variant mb-6 leading-relaxed">Enter your in-game username, then run the code shown here in Minecraft chat as <code class="px-1.5 py-0.5 rounded bg-surface-container text-on-surface font-mono text-[13px]">/score verify &lt;code&gt;</code>. Only the real player with that name can complete the login.</p>
+    <p class="font-body-sm text-body-sm text-on-surface-variant mb-6 leading-relaxed">Enter your in-game username, then run the code shown here in Minecraft chat as <code class="px-1.5 py-0.5 rounded bg-surface-container text-on-surface font-mono text-[13px]">/openmcmelody verify &lt;code&gt;</code>. Only the real player with that name can complete the login.</p>
 
     <div id="login-form" class="space-y-3">
       <input id="username-input" placeholder="Minecraft username" maxlength="16" autocomplete="off"
@@ -246,7 +246,7 @@
 
     <div id="code-area" class="hidden space-y-3">
       <div id="code-text" class="text-center py-4 rounded-xl bg-surface-container-highest border-2 border-dashed border-primary text-primary font-headline-lg text-headline-lg tracking-[0.3em]"></div>
-      <p class="font-body-sm text-body-sm text-on-surface-variant text-center">Run <code class="px-1.5 py-0.5 rounded bg-surface-container text-on-surface font-mono text-[13px]">/score verify <span id="code-inline"></span></code> in-game. This page updates automatically.</p>
+      <p class="font-body-sm text-body-sm text-on-surface-variant text-center">Run <code class="px-1.5 py-0.5 rounded bg-surface-container text-on-surface font-mono text-[13px]">/openmcmelody verify <span id="code-inline"></span></code> in-game. This page updates automatically.</p>
       <div id="login-status" class="text-center font-label-md text-label-md text-on-surface-variant">Waiting for verification...</div>
     </div>
 
@@ -684,7 +684,7 @@ async function onPlayerAction(ev) {
 
 function renderSongs() {
   const box = $('songs-list');
-  if (songs.length === 0) { box.innerHTML = '<div class="text-on-surface-variant font-body-sm text-body-sm py-2">No song files in the scores/ folder.</div>'; return; }
+  if (songs.length === 0) { box.innerHTML = '<div class="text-on-surface-variant font-body-sm text-body-sm py-2">No song files in the music/ folder.</div>'; return; }
   const filtered = songs.filter(matchesSearch);
   if (filtered.length === 0) { box.innerHTML = '<div class="text-on-surface-variant font-body-sm text-body-sm py-2">No songs match your search.</div>'; return; }
   box.innerHTML = filtered.map((s) => {

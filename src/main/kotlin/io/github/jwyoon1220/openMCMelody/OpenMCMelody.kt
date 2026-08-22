@@ -1,11 +1,18 @@
 package io.github.jwyoon1220.openMCMelody
 
+import io.github.jwyoon1220.openMCMelody.audio.AudioLibrary
+import io.github.jwyoon1220.openMCMelody.audio.AudioPackManager
+import io.github.jwyoon1220.openMCMelody.audio.AudioPlaybackManager
 import io.github.jwyoon1220.openMCMelody.command.ScoreCommand
 import io.github.jwyoon1220.openMCMelody.jukebox.JukeboxListener
 import io.github.jwyoon1220.openMCMelody.jukebox.JukeboxPlaybackManager
 import io.github.jwyoon1220.openMCMelody.jukebox.SpecialJukeboxManager
 import io.github.jwyoon1220.openMCMelody.listener.PlayerConnectionListener
 import io.github.jwyoon1220.openMCMelody.midi.SongCache
+import io.github.jwyoon1220.openMCMelody.playback.BukkitPacketSender
+import io.github.jwyoon1220.openMCMelody.playback.PacketEventsPacketSender
+import io.github.jwyoon1220.openMCMelody.playback.PacketSender
+import io.github.jwyoon1220.openMCMelody.playback.PingTracker
 import io.github.jwyoon1220.openMCMelody.playback.PlaybackManager
 import io.github.jwyoon1220.openMCMelody.playback.PlayModeManager
 import io.github.jwyoon1220.openMCMelody.playlist.PlaylistManager
@@ -35,13 +42,20 @@ class OpenMCMelody : JavaPlugin() {
         saveDefaultConfig()
         val publicUrl = config.getString("web.public-url", "")!!.trimEnd('/')
 
-        val scoresFolder = File(dataFolder, "scores")
-        migrateLegacyMidiFolder(scoresFolder)
+        val scoresFolder = File(dataFolder, "music")
+        migrateLegacyFolders(scoresFolder)
         scoresFolder.mkdirs()
         val soundpacksFolder = File(dataFolder, "soundpacks")
         soundpacksFolder.mkdirs()
         val soundfontsFolder = File(dataFolder, "soundfonts")
         soundfontsFolder.mkdirs()
+        val audioFolder = File(dataFolder, "audio")
+        audioFolder.mkdirs()
+
+        val ffmpegPath = config.getString("soundfont.ffmpeg-path", "ffmpeg")!!
+        val audioLibrary = AudioLibrary(audioFolder, ffmpegPath)
+        val audioPackManager = AudioPackManager()
+        val audioPlaybackManager = AudioPlaybackManager(audioPackManager)
 
         val playlistManager = PlaylistManager(this, File(dataFolder, "playlists.yml"))
         val songCache = SongCache(this)
@@ -49,7 +63,13 @@ class OpenMCMelody : JavaPlugin() {
         val restoredPack = soundPackManager.restoreActiveFromDisk()
         if (restoredPack != null) logger.info("Restored active soundpack '$restoredPack'.")
         val playModeManager = PlayModeManager(this, File(dataFolder, "playmodes.yml"))
-        val playbackManager = PlaybackManager(this, playlistManager, songCache, scoresFolder, soundPackManager, playModeManager)
+        val pingCompensationEnabled = config.getBoolean("ping-compensation.enabled", true)
+        val pingTracker = PingTracker(
+            jitterSafetyFactor = config.getDouble("ping-compensation.jitter-safety-factor", 1.0),
+            maxLeadMillis = if (pingCompensationEnabled) config.getLong("ping-compensation.max-lead-millis", 250L) else 0L,
+        )
+        val packetSender = createPacketSender()
+        val playbackManager = PlaybackManager(this, playlistManager, songCache, scoresFolder, soundPackManager, playModeManager, pingTracker, packetSender)
         playbackManager.enable()
         this.playbackManager = playbackManager
 
@@ -62,36 +82,58 @@ class OpenMCMelody : JavaPlugin() {
         server.pluginManager.registerEvents(JukeboxListener(this, jukeboxManager, jukeboxPlaybackManager, scoresFolder), this)
 
         val webAuthManager = if (config.getBoolean("web.enabled", true)) {
-            startWebServer(scoresFolder, songCache, playbackManager, playlistManager, soundPackManager)
+            startWebServer(scoresFolder, songCache, playbackManager, playlistManager, soundPackManager, audioPackManager)
         } else {
             null
         }
 
-        val ffmpegPath = config.getString("soundfont.ffmpeg-path", "ffmpeg")!!
         val soundFontConverter = SoundFontConverter(this, ffmpegPath)
 
         val scoreCommand = ScoreCommand(
             this, scoresFolder, songCache, playbackManager, playlistManager, webAuthManager,
             soundPackManager, publicUrl, soundfontsFolder, soundpacksFolder, soundFontConverter, playModeManager,
+            audioFolder, audioLibrary, audioPlaybackManager,
         )
         lifecycleManager.registerEventHandler(LifecycleEvents.COMMANDS) { event ->
-            event.registrar().register(scoreCommand.build("score"), "Play song files as note block music")
-            event.registrar().register(scoreCommand.build("midi"), "Alias for /score")
+            event.registrar().register(scoreCommand.build("openmcmelody"), "Play song files as note block music")
+            event.registrar().register(scoreCommand.build("ommc"), "Alias for /openmcmelody")
         }
     }
 
     /**
-     * Older installs stored songs under `midi/`; the plugin now supports MusicXML too, so the
-     * folder is renamed to `scores/`. Move any leftover files across on first launch after the
-     * upgrade so server owners don't have to do it by hand.
+     * Older installs stored songs under `midi/`, then `scores/`; the folder is now `music/`. Move
+     * any leftover files across on first launch after an upgrade so server owners don't have to do
+     * it by hand - tries the most recent legacy name first.
      */
-    private fun migrateLegacyMidiFolder(scoresFolder: File) {
-        val legacyFolder = File(dataFolder, "midi")
-        if (!legacyFolder.isDirectory || scoresFolder.exists()) return
-        if (legacyFolder.renameTo(scoresFolder)) {
-            logger.info("Migrated ${legacyFolder.path} to ${scoresFolder.path}.")
-        } else {
-            logger.warning("Found a legacy midi/ folder but could not rename it to scores/ - please move its contents manually.")
+    private fun migrateLegacyFolders(musicFolder: File) {
+        if (musicFolder.exists()) return
+        for (legacyName in listOf("scores", "midi")) {
+            val legacyFolder = File(dataFolder, legacyName)
+            if (!legacyFolder.isDirectory) continue
+            if (legacyFolder.renameTo(musicFolder)) {
+                logger.info("Migrated ${legacyFolder.path} to ${musicFolder.path}.")
+            } else {
+                logger.warning("Found a legacy $legacyName/ folder but could not rename it to music/ - please move its contents manually.")
+            }
+            return
+        }
+    }
+
+    /**
+     * Picks [PacketEventsPacketSender] only when the `packetevents` plugin is actually present and
+     * loads cleanly (declared as a `softdepend` in plugin.yml so it loads before us if present) -
+     * otherwise falls back to [BukkitPacketSender], identical to how OpenMCMelody always sent
+     * sound before packet-level dispatch existed. The try/catch guards against a PacketEvents
+     * version whose API shape doesn't match what this class expects (e.g. a method renamed
+     * upstream); a broken optional integration should never take the whole plugin down with it.
+     */
+    private fun createPacketSender(): PacketSender {
+        if (server.pluginManager.getPlugin("packetevents") == null) return BukkitPacketSender
+        return try {
+            PacketEventsPacketSender().also { logger.info("PacketEvents detected - using direct packet dispatch for note playback.") }
+        } catch (e: Throwable) {
+            logger.warning("PacketEvents is installed but its API didn't initialize as expected (${e.message}) - falling back to Player.playSound().")
+            BukkitPacketSender
         }
     }
 
@@ -101,11 +143,12 @@ class OpenMCMelody : JavaPlugin() {
         playbackManager: PlaybackManager,
         playlistManager: PlaylistManager,
         soundPackManager: SoundPackManager,
+        audioPackManager: AudioPackManager,
     ): WebAuthManager? {
         val bind = config.getString("web.bind", "0.0.0.0")!!
         val port = config.getInt("web.port", 8080)
         val authManager = WebAuthManager()
-        val server = WebServer(this, authManager, scoresFolder, songCache, playbackManager, playlistManager, soundPackManager)
+        val server = WebServer(this, authManager, scoresFolder, songCache, playbackManager, playlistManager, soundPackManager, audioPackManager)
         return try {
             server.start(bind, port)
             webServer = server

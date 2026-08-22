@@ -7,10 +7,14 @@ plugins {
 repositories {
     mavenCentral()
     maven("https://repo.papermc.io/repository/maven-public/")
+    maven("https://repo.codemc.io/repository/maven-public/")
 }
 
 dependencies {
     compileOnly("io.papermc.paper:paper-api:26.2.build.+")
+    // Optional (softdepend) - only used if the PacketEvents plugin is present on the server, for
+    // packet-level note dispatch (see io.github.jwyoon1220.openMCMelody.playback.PacketSender).
+    compileOnly("com.github.retrooper:packetevents-spigot:2.7.0")
     implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8")
     implementation("org.audiveris:proxymusic:4.0.3")
 }

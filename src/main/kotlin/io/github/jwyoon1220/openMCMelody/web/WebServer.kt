@@ -3,6 +3,7 @@ package io.github.jwyoon1220.openMCMelody.web
 import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
 import io.github.jwyoon1220.openMCMelody.Permissions
+import io.github.jwyoon1220.openMCMelody.audio.AudioPackManager
 import io.github.jwyoon1220.openMCMelody.midi.SongCache
 import io.github.jwyoon1220.openMCMelody.midi.SongFiles
 import io.github.jwyoon1220.openMCMelody.playback.PlaybackManager
@@ -33,6 +34,7 @@ class WebServer(
     private val playbackManager: PlaybackManager,
     private val playlistManager: PlaylistManager,
     private val soundPackManager: SoundPackManager,
+    private val audioPackManager: AudioPackManager,
 ) {
     private var httpServer: HttpServer? = null
     private var pool: ExecutorService? = null
@@ -64,6 +66,7 @@ class WebServer(
         server.createContext("/api/seek") { route(it, ::handleSeek) }
         // No session auth here - this is fetched by the Minecraft client itself, not a browser.
         server.createContext("/resourcepack") { route(it, ::handleResourcePack) }
+        server.createContext("/audiopack") { route(it, ::handleAudioPack) }
 
         server.start()
         httpServer = server
@@ -166,6 +169,14 @@ class WebServer(
         exchange.responseBody.use { it.write(result.pack.bytes) }
     }
 
+    private fun handleAudioPack(exchange: HttpExchange) {
+        if (exchange.requestMethod != "GET") return respondJson(exchange, 405, mapOf("error" to "Method not allowed"))
+        val built = audioPackManager.current ?: return respondJson(exchange, 404, mapOf("error" to "No audio pack has been built yet"))
+        exchange.responseHeaders.add("Content-Type", "application/zip")
+        exchange.sendResponseHeaders(200, built.bytes.size.toLong())
+        exchange.responseBody.use { it.write(built.bytes) }
+    }
+
     // ---- playlists (open to any logged-in session, mirrors in-game permission) ----
 
     private fun handlePlaylistsRoute(exchange: HttpExchange) {
@@ -222,7 +233,7 @@ class WebServer(
         if (targets.isEmpty()) return respondJson(exchange, 400, mapOf("error" to "No valid targets"))
 
         val firstFile = File(scoresFolder, playlist.songs[0])
-        if (!firstFile.isFile) return respondJson(exchange, 400, mapOf("error" to "First song missing from scores/"))
+        if (!firstFile.isFile) return respondJson(exchange, 400, mapOf("error" to "First song missing from music/"))
 
         val song = try {
             songCache.get(firstFile).join()

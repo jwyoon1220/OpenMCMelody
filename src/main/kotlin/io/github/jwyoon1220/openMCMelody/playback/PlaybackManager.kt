@@ -53,6 +53,8 @@ class PlaybackManager(
     private val scoresFolder: File,
     private val soundPackManager: SoundPackManager,
     private val playModeManager: PlayModeManager,
+    private val pingTracker: PingTracker,
+    private val packetSender: PacketSender,
 ) {
     private val mainThreadExecutor: Executor = BukkitExecutors.main(plugin)
 
@@ -61,7 +63,7 @@ class PlaybackManager(
 
     private var task: BukkitTask? = null
 
-    // Dedicated real-time thread for PlayMode.INSTANT dispatch - see scheduleInstantNote. Kept
+    // Dedicated real-time thread for PlayMode.INSTANT dispatch - see dispatchInstantChord. Kept
     // separate from the Bukkit scheduler entirely, since the latter can't schedule sub-tick.
     private var instantExecutor: ScheduledExecutorService? = null
 
@@ -110,12 +112,14 @@ class PlaybackManager(
         instantExecutor = Executors.newSingleThreadScheduledExecutor { r ->
             Thread(r, "OpenMCMelody-InstantDispatch").apply { isDaemon = true }
         }
+        pingTracker.start(plugin)
         task = plugin.server.scheduler.runTaskTimer(plugin, Runnable { tick() }, 0L, 1L)
     }
 
     fun disable() {
         task?.cancel()
         task = null
+        pingTracker.stop()
         instantExecutor?.shutdownNow()
         instantExecutor = null
         activeSessions.clear()
@@ -261,11 +265,12 @@ class PlaybackManager(
             val windowEndMicros = nowMicros + MC_TICK_MICROS
             if (session.instantNextEventIndex < song.size && song.tickMicros[session.instantNextEventIndex] < windowEndMicros) {
                 val instantTargets = session.targets.filterTo(LinkedHashSet()) { playModeManager.modeOf(it) == PlayMode.INSTANT }
+                val dueIndices = ArrayList<Int>()
                 while (session.instantNextEventIndex < song.size && song.tickMicros[session.instantNextEventIndex] < windowEndMicros) {
-                    val idx = session.instantNextEventIndex
-                    if (instantTargets.isNotEmpty()) scheduleInstantNote(instantTargets, song, idx, nowMicros)
+                    dueIndices += session.instantNextEventIndex
                     session.instantNextEventIndex++
                 }
+                if (instantTargets.isNotEmpty()) dispatchInstantChord(instantTargets, song, dueIndices, nowMicros)
             }
 
             session.cursorTick++
@@ -347,10 +352,12 @@ class PlaybackManager(
             val player = Bukkit.getPlayer(uuid) ?: continue
             val location = player.location
             locations[player] = location
-            if (customKey != null) {
-                player.playSound(location, customKey, voice.category, volume, customPitch)
-            } else {
-                player.playSound(location, slot.vanilla, voice.category, volume, vanillaPitch)
+            val pitch = if (customKey != null) customPitch else vanillaPitch
+            try {
+                packetSender.sendNoteSound(player, voice.category, customKey, slot.vanilla, pitch, volume, location)
+                packetSender.flush(player)
+            } catch (_: Exception) {
+                // Best-effort, same reasoning as scheduleInstantNote/dispatchInstantChord's playSound try/catch.
             }
         }
         if (locations.isNotEmpty() && !resolution.selfTerminating) {
@@ -510,7 +517,7 @@ class PlaybackManager(
      * bookkeeping for it (see [allocateVoice]'s doc for how voice identity works).
      *
      * Runs on [instantExecutor]'s dedicated thread, never the main thread - like
-     * [scheduleInstantNote], it only ever reads the pre-captured [locations] snapshot (built on the
+     * [dispatchInstantChord], it only ever reads the pre-captured [locations] snapshot (built on the
      * main thread by both call sites), never touches live [Player] state itself.
      */
     private fun scheduleRelease(
@@ -536,13 +543,13 @@ class PlaybackManager(
                             player.stopSound(vanillaSound, voice.category)
                         }
                     } catch (_: Exception) {
-                        // Best-effort, same reasoning as scheduleInstantNote's playSound try/catch.
+                        // Best-effort, same reasoning as dispatchInstantChord's playSound try/catch.
                     }
                     if (releaseKey != null) {
                         try {
                             player.playSound(location, releaseKey, voice.category, releaseVolume, releasePitch)
                         } catch (_: Exception) {
-                            // Best-effort, same reasoning as scheduleInstantNote's playSound try/catch.
+                            // Best-effort, same reasoning as dispatchInstantChord's playSound try/catch.
                         }
                     }
                 }
@@ -550,58 +557,86 @@ class PlaybackManager(
         }, extraDelayMillis + voice.releaseDelayMillis, TimeUnit.MILLISECONDS)
     }
 
+    /** One [dispatchInstantChord] note, pre-resolved on the main thread - only the transport call itself is deferred to [instantExecutor]. */
+    private class PreparedNote(val customKey: String?, val vanillaSound: Sound, val pitch: Float, val volume: Float, val category: SoundCategory, val rawDelayMillis: Long)
+
     /**
-     * Dispatches one note for [PlayMode.INSTANT] targets at its true sub-tick onset rather than
-     * waiting for the next server tick. Everything Bukkit-touching that the eventual send needs -
-     * the [org.bukkit.entity.Player] references and their current location - is captured here on
-     * the main thread; the scheduled callback below only reads that already-captured snapshot.
+     * Dispatches every note due in the current tick's window for [PlayMode.INSTANT] targets at
+     * its true sub-tick onset rather than waiting for the next server tick. Everything
+     * Bukkit-touching the eventual send needs - the [org.bukkit.entity.Player] references, their
+     * current location, and every note's resolved sound/voice - is captured here on the main
+     * thread, in the same per-note order [scheduleRelease]/[allocateVoice] have always run in;
+     * the scheduled callbacks below only ever read that already-captured snapshot.
      *
-     * Calling [org.bukkit.entity.Player.playSound] from [instantExecutor]'s thread is outside
-     * Paper's documented thread-safety contract for [org.bukkit.entity.Player]. It works in
-     * practice because it only ever enqueues an outbound packet write - the same class of
-     * operation Minecraft's own networking code performs off the main thread - but a future
-     * server version could tighten that, hence the defensive try/catch: one dropped note should
-     * never surface as an error, just a missed sound.
+     * Notes are grouped first by their raw (uncompensated) onset delay - a chord's notes share
+     * (near-)identical [ParsedSong.tickMicros], so they collapse into one group automatically -
+     * then, per target player, that group's delay is reduced by [PingTracker.leadTimeMillis] (a
+     * one-way-latency + jitter margin estimate, so the packet lands close to the note's true
+     * intended moment despite that player's own network delay) and dispatched from a single
+     * scheduled callback that sends every note in the group back-to-back before one [PacketSender.flush]
+     * - one scheduled task and one flush per player per delay bucket, instead of one of each per note.
+     *
+     * Calling [PacketSender.sendNoteSound] from [instantExecutor]'s thread is outside Paper's
+     * documented thread-safety contract for [org.bukkit.entity.Player]. It works in practice
+     * because it only ever enqueues an outbound packet write - the same class of operation
+     * Minecraft's own networking code performs off the main thread - but a future server version
+     * could tighten that, hence the defensive try/catch: one dropped note should never surface as
+     * an error, just a missed sound.
      */
-    private fun scheduleInstantNote(targets: Set<UUID>, song: ParsedSong, idx: Int, nowMicros: Long) {
+    private fun dispatchInstantChord(targets: Set<UUID>, song: ParsedSong, indices: List<Int>, nowMicros: Long) {
+        if (indices.isEmpty()) return
         val executor = instantExecutor ?: return
         val players = targets.mapNotNull { Bukkit.getPlayer(it) }
         if (players.isEmpty()) return
         val locations = players.associateWith { it.location }
-        val slot = song.sound[idx]
-        val rawNote = song.rawNote[idx]
-        val vanillaPitch = song.vanillaPitch[idx]
-        val customPitch = song.customPitch[idx]
-        val volume = song.volume[idx]
-        val durationMicros = song.durationMicros[idx]
-        val resolution = soundPackManager.resolvePlaybackSound(slot, durationMicros)
-        val customKey = resolution.customKey
-        val voice = if (resolution.selfTerminating) {
-            allocateSelfTerminatingVoice(customKey!!, rawNote, durationMicros / 1000)
-        } else {
-            allocateVoice(customKey ?: slot.vanilla, slot, durationMicros, rawNote)
-        }
-        // Notes already due (song.tickMicros[idx] <= nowMicros, e.g. right after a lag spike) fire
-        // with ~0 delay instead of waiting for a false "next tick" - see instantElapsedMicros.
-        val delayMillis = (song.tickMicros[idx] - nowMicros).coerceAtLeast(0) / 1000
 
-        executor.schedule({
-            for (player in players) {
-                if (!player.isOnline) continue
-                val location = locations.getValue(player)
-                try {
-                    if (customKey != null) {
-                        player.playSound(location, customKey, voice.category, volume, customPitch)
-                    } else {
-                        player.playSound(location, slot.vanilla, voice.category, volume, vanillaPitch)
-                    }
-                } catch (_: Exception) {
-                    // Best-effort: a mid-flight disconnect or send failure shouldn't kill the scheduler thread.
-                }
+        val prepared = ArrayList<PreparedNote>(indices.size)
+        for (idx in indices) {
+            val slot = song.sound[idx]
+            val rawNote = song.rawNote[idx]
+            val vanillaPitch = song.vanillaPitch[idx]
+            val customPitch = song.customPitch[idx]
+            val volume = song.volume[idx]
+            val durationMicros = song.durationMicros[idx]
+            val resolution = soundPackManager.resolvePlaybackSound(slot, durationMicros)
+            val customKey = resolution.customKey
+            val voice = if (resolution.selfTerminating) {
+                allocateSelfTerminatingVoice(customKey!!, rawNote, durationMicros / 1000)
+            } else {
+                allocateVoice(customKey ?: slot.vanilla, slot, durationMicros, rawNote)
             }
-        }, delayMillis, TimeUnit.MILLISECONDS)
-        if (!resolution.selfTerminating) {
-            scheduleRelease(voice, delayMillis, locations, customKey, slot.vanilla, resolution.releaseKey, customPitch, volume)
+            // Notes already due (song.tickMicros[idx] <= nowMicros, e.g. right after a lag spike) fire
+            // with ~0 delay instead of waiting for a false "next tick" - see instantElapsedMicros.
+            val rawDelayMillis = (song.tickMicros[idx] - nowMicros).coerceAtLeast(0) / 1000
+            val pitch = if (customKey != null) customPitch else vanillaPitch
+            prepared += PreparedNote(customKey, slot.vanilla, pitch, volume, voice.category, rawDelayMillis)
+            if (!resolution.selfTerminating) {
+                scheduleRelease(voice, rawDelayMillis, locations, customKey, slot.vanilla, resolution.releaseKey, customPitch, volume)
+            }
+        }
+
+        val byRawDelay = prepared.groupBy { it.rawDelayMillis }
+        for (player in players) {
+            val location = locations.getValue(player)
+            val leadMillis = pingTracker.leadTimeMillis(player.uniqueId)
+            for ((rawDelayMillis, notes) in byRawDelay) {
+                val effectiveDelay = (rawDelayMillis - leadMillis).coerceAtLeast(0)
+                executor.schedule({
+                    if (!player.isOnline) return@schedule
+                    for (note in notes) {
+                        try {
+                            packetSender.sendNoteSound(player, note.category, note.customKey, note.vanillaSound, note.pitch, note.volume, location)
+                        } catch (_: Exception) {
+                            // Best-effort: a mid-flight disconnect or send failure shouldn't kill the scheduler thread.
+                        }
+                    }
+                    try {
+                        packetSender.flush(player)
+                    } catch (_: Exception) {
+                        // Best-effort, same reasoning as above.
+                    }
+                }, effectiveDelay, TimeUnit.MILLISECONDS)
+            }
         }
     }
 

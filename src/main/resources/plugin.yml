@@ -4,6 +4,9 @@ version: '${version}'
 main: io.github.jwyoon1220.openMCMelody.OpenMCMelody
 api-version: '26.2'
 load: POSTWORLD
+# Not required - only used for packet-level note dispatch (see the `playback` package's
+# PacketSender) if actually installed; playback falls back to Player.playSound() without it.
+softdepend: [packetevents]
 
 permissions:
   openmcmelody.score.admin:

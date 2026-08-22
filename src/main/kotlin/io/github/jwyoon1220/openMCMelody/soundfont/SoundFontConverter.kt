@@ -5,7 +5,10 @@ import org.bukkit.plugin.Plugin
 import java.io.File
 import java.io.IOException
 import java.nio.file.Files
+import java.util.concurrent.ExecutionException
+import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 import javax.sound.sampled.AudioSystem
 
 /** Matches the "_release_<holdMillis>" suffix SoundFontExtractorMain encodes into a release-layer slot key. */
@@ -38,8 +41,9 @@ class SoundFontConverter(private val plugin: Plugin, private val ffmpegPath: Str
     }
 
     /**
-     * @param onProgress called (from whatever thread [convert] itself runs on - callers already
-     * run this off the main thread) with a 0-100 percent and a short human-readable status, e.g.
+     * @param onProgress called (from whatever thread [convert] itself runs on, or - during the
+     * encoding phase - from whichever of [encodeAll]'s virtual threads finishes a file, so callers
+     * must be thread-safe/re-entrant) with a 0-100 percent and a short human-readable status, e.g.
      * `(37, "Extracting c_1 from gm.sf2")`. Extraction is weighted [EXTRACTION_WEIGHT_PERCENT] of
      * the bar and ffmpeg encoding the remainder, since extraction dominates wall-clock time.
      */
@@ -65,13 +69,7 @@ class SoundFontConverter(private val plugin: Plugin, private val ffmpegPath: Str
             if (entries.isEmpty()) throw ConversionException("'${soundFontFile.name}' contains no usable General MIDI instruments (bank 0, programs 0-127)")
 
             packFolder.mkdirs()
-            val renderedSlots = mutableListOf<String>()
-            for ((index, entry) in entries.withIndex()) {
-                val (slot, wavName) = entry
-                val percent = EXTRACTION_WEIGHT_PERCENT + (index + 1) * (100 - EXTRACTION_WEIGHT_PERCENT) / entries.size
-                onProgress(percent, "Encoding $slot.ogg")
-                if (runFfmpeg(File(tempDir, wavName), File(packFolder, "$slot.ogg"), fadeOut = RELEASE_CHECKPOINT_SUFFIX.containsMatchIn(slot))) renderedSlots += slot
-            }
+            val renderedSlots = encodeAll(entries, tempDir, packFolder, onProgress)
             if (renderedSlots.isEmpty()) {
                 throw ConversionException("ffmpeg failed to convert any samples - check 'soundfont.ffmpeg-path' in config.yml points at a working ffmpeg")
             }
@@ -121,6 +119,56 @@ class SoundFontConverter(private val plugin: Plugin, private val ffmpegPath: Str
             throw ConversionException("Soundfont extraction failed (exit ${process.exitValue()}): ${output.take(500)}")
         }
         plugin.logger.info("Soundfont extraction: ${output.trim()}")
+    }
+
+    /**
+     * Runs [runFfmpeg] for every extracted [entries] file concurrently, one virtual thread per
+     * file, instead of blocking through them one at a time. Each call is dominated by waiting on
+     * the external `ffmpeg` process's own I/O, not CPU work in this JVM, so it's a textbook fit
+     * for virtual threads: hundreds can be in flight waiting on their own subprocess at once
+     * without pinning hundreds of platform threads, and wall-clock time for the whole encoding
+     * phase drops to roughly the slowest single file instead of the sum of all of them.
+     *
+     * Returns the successfully-encoded slot keys in [entries]' original order (order has no
+     * functional effect on the pack - only cosmetic ordering in the written `pack.yml`).
+     */
+    private fun encodeAll(
+        entries: List<Pair<String, String>>,
+        tempDir: File,
+        packFolder: File,
+        onProgress: (Int, String) -> Unit,
+    ): List<String> {
+        val results = arrayOfNulls<String>(entries.size)
+        val completed = AtomicInteger(0)
+        val progressLock = Any()
+        val executor = Executors.newVirtualThreadPerTaskExecutor()
+        val futures = try {
+            entries.mapIndexed { index, (slot, wavName) ->
+                executor.submit {
+                    val fadeOut = RELEASE_CHECKPOINT_SUFFIX.containsMatchIn(slot)
+                    if (runFfmpeg(File(tempDir, wavName), File(packFolder, "$slot.ogg"), fadeOut)) {
+                        results[index] = slot
+                    }
+                    val done = completed.incrementAndGet()
+                    val percent = EXTRACTION_WEIGHT_PERCENT + done * (100 - EXTRACTION_WEIGHT_PERCENT) / entries.size
+                    // onProgress isn't guaranteed thread-safe by callers - serialize calls into it
+                    // rather than letting concurrent virtual threads race into it directly.
+                    synchronized(progressLock) { onProgress(percent, "Encoding $slot.ogg") }
+                }
+            }
+        } finally {
+            executor.shutdown()
+        }
+        var firstError: Throwable? = null
+        for (future in futures) {
+            try {
+                future.get()
+            } catch (e: ExecutionException) {
+                if (firstError == null) firstError = e.cause ?: e
+            }
+        }
+        firstError?.let { throw (it as? ConversionException) ?: ConversionException("ffmpeg encoding failed: ${it.message}") }
+        return results.filterNotNull()
     }
 
     private fun runFfmpeg(wavFile: File, oggFile: File, fadeOut: Boolean): Boolean {
